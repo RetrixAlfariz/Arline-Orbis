@@ -55,6 +55,7 @@
   let seed = $state('aurelia-001');
   let showWater = $state(true);
   let bathymetry = $state(false);
+  let mapStyle = $state<'natural' | 'survey'>('natural');
   let measureStart = $state<Coordinate | null>(null);
   let recoveryIndex = $state('');
   let worldName = $state('New world');
@@ -86,7 +87,7 @@
     site.lat_deg === selection.lat_deg && site.lon_deg === selection.lon_deg));
   const name = $derived(draft?.name ?? selectedLandmark?.name ?? '');
 
-  $effect(() => { if (ready) texture = terrainTexture(raster, { seaLevel: planet.sea_level_m, showWater, bathymetry }); });
+  $effect(() => { if (ready) texture = terrainTexture(raster, { seaLevel: planet.sea_level_m, showWater, bathymetry, style: mapStyle }); });
   $effect(() => { latitude = project.selection.lat_deg; longitude = project.selection.lon_deg; });
   $effect(() => { radiusKm = planet.radius_m / 1000; seaLevel = planet.sea_level_m; seed = planet.seed; });
   const copy = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
@@ -365,6 +366,7 @@
       <div class="map-toolbar">
         <span class="view-caption">{mode === 'atlas' ? 'Equirectangular projection' : 'Spherical view'}</span>
         <div class="map-options">{#if mode === 'atlas'}<label><input type="checkbox" bind:checked={showGrid} />Grid</label><label><input type="checkbox" bind:checked={showLabels} />Region labels</label>{/if}<label><input type="checkbox" bind:checked={showWater} />Water</label><label><input type="checkbox" bind:checked={bathymetry} />Bathymetry</label>
+          <label class="atlas-style-label">Style <select aria-label="Atlas map style" bind:value={mapStyle}><option value="natural">Natural atlas</option><option value="survey">Survey sheet</option></select></label>
           {#if mode === 'atlas'}<button type="button" class="tool-toggle" class:active={sculptMode} aria-pressed={sculptMode} onclick={() => sculptMode = !sculptMode}>✦ {sculptMode ? 'Sculpt ON' : 'Sculpt terrain'}</button>{/if}
         </div>
       </div>
