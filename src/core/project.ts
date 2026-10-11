@@ -1,11 +1,14 @@
 import { SAMPLE_PLANET, createLandmark } from './world';
 import type { Coordinate, Landmark, Planet } from './world';
 import { coordinate } from '../geo/coordinates';
+import { validateTerrainStroke, MAX_TERRAIN_STROKES } from '../terrain/sculpt';
+import type { TerrainStroke } from '../terrain/sculpt';
 
 export interface Draft extends Coordinate { name: string; altitude_m: number }
 export interface Project {
   format: 'orbis-project';
-  version: 1;
+  version: 1 | 2;
+  terrain_strokes?: TerrainStroke[];
   planet: Planet;
   landmarks: Landmark[];
   drafts: Draft[];
@@ -37,12 +40,12 @@ export function decodeProject(input: string | unknown): Project {
   if (typeof input === 'string' && new TextEncoder().encode(input).length > MAX_PROJECT_BYTES) throw new Error('Project exceeds the 2 MB limit.');
   const root = object(typeof input === 'string' ? JSON.parse(input) : input);
   if (typeof input !== 'string' && new TextEncoder().encode(JSON.stringify(root)).length > MAX_PROJECT_BYTES) throw new Error('Project exceeds the 2 MB limit.');
-  if (root.format !== 'orbis-project' || (root.version !== 1 && root.version !== 0)) throw new Error('Unsupported Orbis project format or version.');
+  if (root.format !== 'orbis-project' || (root.version !== 2 && root.version !== 1 && root.version !== 0)) throw new Error('Unsupported Orbis project format or version.');
   const p = object(root.planet);
-  if (p.algorithm_version !== 'm0-sample-v1') throw new Error('Unsupported terrain algorithm. Import has not changed your workspace.');
+  if (p.algorithm_version !== 'm0-sample-v1' && p.algorithm_version !== 'm2-seeded-v1') throw new Error('Unsupported terrain algorithm. Import has not changed your workspace.');
   const planet = { ...p, id: text(p.id, 100), name: text(p.name, 80), seed: text(p.seed, 100),
     radius_m: number(p.radius_m, 1000, 1_000_000_000), sea_level_m: number(p.sea_level_m, -20_000, 20_000),
-    algorithm_version: 'm0-sample-v1' } as Planet;
+    algorithm_version: p.algorithm_version as Planet['algorithm_version'] } as Planet;
   if (!Array.isArray(root.landmarks) || root.landmarks.length > 1000) throw new Error('Invalid landmark collection (maximum 1,000).');
   const ids = new Set<string>();
   const anchors = new Set<string>();
@@ -66,8 +69,21 @@ export function decodeProject(input: string | unknown): Project {
     draftKeys.add(anchorKey(point));
     return { ...point, name: text(item.name, 80, true), altitude_m: number(item.altitude_m, -20_000, 20_000) };
   });
+  const rawStrokes = root.terrain_strokes;
+  if (root.version === 2 && (!Array.isArray(rawStrokes) || rawStrokes.length > MAX_TERRAIN_STROKES)) {
+    throw new Error('Invalid authored terrain strokes (maximum 256).');
+  }
+  if (root.version !== 2 && rawStrokes !== undefined) throw new Error('Terrain edits require version 2.');
+  const strokeIds = new Set<string>();
+  const terrain_strokes = root.version === 2 ? (rawStrokes as unknown[]).map((value) => {
+    const stroke = validateTerrainStroke(value);
+    if (strokeIds.has(stroke.id)) throw new Error('Duplicate terrain stroke ID.');
+    strokeIds.add(stroke.id);
+    return stroke;
+  }) : undefined;
   // Version 0 is the explicit pre-lock JSON format; migration retains the original in recovery history.
-  const result: Project = { ...root, ...(root.version === 0 ? { migration_source: root } : {}), format: 'orbis-project', version: 1, planet, landmarks, drafts,
+  const result: Project = { ...root, ...(root.version === 0 ? { migration_source: root } : {}), format: 'orbis-project', version: root.version === 0 ? 1 : root.version as 1 | 2, planet, landmarks, drafts,
+    ...(root.version === 2 ? { terrain_strokes } : {}),
     selection: root.selection ? location(root.selection) : coordinate(30, -55) };
   if (new TextEncoder().encode(JSON.stringify(result)).length > MAX_PROJECT_BYTES) throw new Error('Migrated project exceeds the 2 MB limit including its original backup.');
   return result;
