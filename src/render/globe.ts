@@ -2,8 +2,11 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { Coordinate, Landmark } from '../core/world';
 import { coordinate, fromVector, toVector } from '../geo/coordinates';
+import { sampleElevation } from '../terrain/sample';
+import type { ElevationRaster } from '../terrain/sample';
 
 export function createGlobe(host: HTMLElement, textureCanvas: HTMLCanvasElement,
+  initialRaster: ElevationRaster, initialRadius_m: number,
   onselect: (point: Coordinate) => void, onhover: (point: Coordinate | null) => void,
   onerror: (message: string) => void) {
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -23,22 +26,49 @@ export function createGlobe(host: HTMLElement, textureCanvas: HTMLCanvasElement,
   const texture = new THREE.CanvasTexture(textureCanvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.wrapS = THREE.RepeatWrapping;
-  const geometry = new THREE.SphereGeometry(1, 96, 64);
-  const material = new THREE.MeshBasicMaterial({ map: texture });
+  const geometry = new THREE.SphereGeometry(1, 144, 96);
+  const originalPositions = new Float32Array(geometry.attributes.position.array);
+  let activeRaster = initialRaster;
+  let activeRadius_m = initialRadius_m;
+  const material = new THREE.MeshStandardMaterial({ map: texture, roughness: 1, metalness: 0 });
   const sphere = new THREE.Mesh(geometry, material);
   scene.add(sphere);
+  scene.add(new THREE.AmbientLight('#ffffff', 1.7));
+  const sun = new THREE.DirectionalLight('#fff5df', 2.2);
+  sun.position.set(-3, 5, 6);
+  scene.add(sun);
+  // Purposefully exaggerated but bounded relief to keep planetary curvature stable.
+  // 3D styling never mutates elevation data or the datum reported by the inspector.
+  function visualRadius(point: Coordinate): number {
+    const lift = sampleElevation(activeRaster, point) / activeRadius_m * 18;
+    return 1 + Math.max(-0.03, Math.min(0.03, lift));
+  }
+  function rebuildTerrain(nextRaster: ElevationRaster, radius_m: number) {
+    activeRaster = nextRaster; activeRadius_m = radius_m;
+    const positions = geometry.attributes.position as THREE.BufferAttribute;
+    for (let i = 0; i < positions.count; i++) {
+      const x = originalPositions[i * 3], y = originalPositions[i * 3 + 1], z = originalPositions[i * 3 + 2];
+      const loc = fromVector(x, y, z);
+      const radius = visualRadius(loc);
+      positions.setXYZ(i, x * radius, y * radius, z * radius);
+    }
+    positions.needsUpdate = true;
+    geometry.computeVertexNormals();
+    geometry.computeBoundingSphere();
+  }
+  rebuildTerrain(initialRaster, initialRadius_m);
   // Geographic graticule is display-only, slightly above the shared terrain texture.
   const gridPoints: number[] = [];
   for (const latitude of [-60, -30, 0, 30, 60]) {
     for (let longitude = -180; longitude < 180; longitude += 3) {
-      gridPoints.push(...toVector({ lat_deg: latitude, lon_deg: longitude }, 1.002),
-        ...toVector({ lat_deg: latitude, lon_deg: longitude + 3 }, 1.002));
+      gridPoints.push(...toVector({ lat_deg: latitude, lon_deg: longitude }, 1.031),
+        ...toVector({ lat_deg: latitude, lon_deg: longitude + 3 }, 1.031));
     }
   }
   for (let longitude = -180; longitude < 180; longitude += 30) {
     for (let latitude = -90; latitude < 90; latitude += 3) {
-      gridPoints.push(...toVector({ lat_deg: latitude, lon_deg: longitude }, 1.002),
-        ...toVector({ lat_deg: latitude + 3, lon_deg: longitude }, 1.002));
+      gridPoints.push(...toVector({ lat_deg: latitude, lon_deg: longitude }, 1.031),
+        ...toVector({ lat_deg: latitude + 3, lon_deg: longitude }, 1.031));
     }
   }
   const gridGeometry = new THREE.BufferGeometry();
@@ -129,20 +159,28 @@ export function createGlobe(host: HTMLElement, textureCanvas: HTMLCanvasElement,
   canvas.addEventListener('pointercancel', pointercancel);
   canvas.addEventListener('webglcontextlost', contextlost);
 
+  function updateMarkerPosition() {
+    if (currentSelection) selectedMarker.position.set(...toVector(currentSelection, visualRadius(currentSelection) + 0.012));
+  }
   return {
     setTexture(canvas: HTMLCanvasElement) { texture.image = canvas; texture.needsUpdate = true; draw(); },
+    setTerrain(raster: ElevationRaster, radius_m: number) {
+      rebuildTerrain(raster, radius_m);
+      if (currentSelection) updateMarkerPosition();
+      draw();
+    },
     update(selection: Coordinate | null, landmarks: Landmark[]) {
       currentSelection = selection;
       markers.clear();
       for (const landmark of landmarks) {
         const marker = new THREE.Mesh(markerGeometry, markerMaterial);
-        marker.position.set(...toVector(landmark.position, 1.012));
+        marker.position.set(...toVector(landmark.position, visualRadius(landmark.position) + 0.008));
         marker.userData.position = landmark.position;
         markers.add(marker);
       }
       selectedMarker.visible = selection !== null;
       if (selection) {
-        selectedMarker.position.set(...toVector(selection, 1.018));
+        updateMarkerPosition();
         camera.position.set(...toVector(selection, camera.position.length()));
         controls.update();
       }

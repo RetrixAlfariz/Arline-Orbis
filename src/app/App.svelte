@@ -373,7 +373,7 @@
       <div class="viewport" class:globe-mode={mode === 'globe'} class:sculpt-mode={sculptMode}>
         {#if texture}
           {#if mode === 'atlas'}<Atlas {texture} {selection} {landmarks} {showGrid} {showLabels} worldName={planet.name} sampleRegions={isSampleWorld} sculptMode={sculptMode} brushRadiusKm={brushRadius} planetRadius_m={planet.radius_m} onselect={selectOrSculpt} onhover={(point) => hover = point} />
-          {:else}<Globe {texture} {selection} {landmarks} onselect={select} onhover={(point) => hover = point} onerror={globeError} />{/if}
+          {:else}<Globe {texture} {raster} radius_m={planet.radius_m} {selection} {landmarks} onselect={select} onhover={(point) => hover = point} onerror={globeError} />{/if}
         {:else}<p class="loading" role="status">Preparing sample terrain…</p>{/if}
       </div>
       <div class="chart-bottom">
@@ -435,7 +435,7 @@
     <details class="inspector-tool"><summary>World settings</summary><form onsubmit={(e) => { e.preventDefault(); applySettings(); }}><label>Planet radius (km)<input type="number" bind:value={radiusKm} min="1" max="1000000" step="any" required /></label><label>Sea level (m)<input type="number" bind:value={seaLevel} min="-20000" max="20000" step="any" required /></label><label>Terrain seed<input bind:value={seed} maxlength="100" required /></label><button class="secondary" disabled={!ready} type="submit">Apply world settings</button></form><p class="help-text">Changing the seed regenerates sample terrain. Authored coordinates and elevations stay fixed. Sea level changes wet areas and water depth.</p></details>
     <div class="inspector-foot">
       <p class="session-note"><span aria-hidden="true">◷</span>{storageError ? 'Local save needs attention. Export before closing.' : 'Autosave in this browser. Export a backup to keep a portable copy.'}</p>
-      <details class="prototype-details"><summary>About this sample</summary><p>Fictional terrain for exploring Orbis, not a scientific simulation. Authored landmarks are independent of regenerated terrain.</p><p>One {raster.width} × {raster.height} elevation raster powers both views. Water depth is sea level minus submerged elevation; it is not cave depth. Authored landmark elevation changes the anchor, while terrain strokes change the actual elevation raster.</p><p>Generation: {generationMs.toFixed(1)} ms · raster: {(raster.samples.byteLength / 1024).toFixed(0)} KiB · {planet.algorithm_version}</p></details>
+      <details class="prototype-details"><summary>About this sample</summary><p>Fictional terrain for exploring Orbis, not a scientific simulation. Authored landmarks are independent of regenerated terrain.</p><p>One {raster.width} × {raster.height} elevation raster powers both views. Water depth is sea level minus submerged elevation; it is not cave depth. Authored landmark elevation changes the anchor, while terrain strokes change the actual elevation raster.</p><p>Generation: {generationMs.toFixed(1)} ms · raster: {(raster.samples.byteLength / 1024).toFixed(0)} KiB · {planet.algorithm_version}. The globe uses visually exaggerated terrain geometry; all inspector elevations are measured from original data.</p></details>
     </div>
   </aside>
 </main>
