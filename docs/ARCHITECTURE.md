@@ -1,6 +1,6 @@
 # Proposed architecture
 
-**Status: architecture proposal, not an implemented stack.** Opheline may refine internal details but should preserve the product contracts in this document.
+**Status:** Svelte/Vite/TypeScript, renderer-independent geographic types, coarse sample terrain, Canvas/SVG atlas and lazy Three.js globe are implemented in M0. Storage, workers, integrations and later pipelines below remain proposals. See [M0 implementation decisions](M0.md).
 
 ## 1. Implementation decision
 

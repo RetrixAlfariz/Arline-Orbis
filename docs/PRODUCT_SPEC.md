@@ -1,6 +1,6 @@
 # Product specification
 
-**Stage:** initial design baseline. Features below are requirements or proposals, not implemented claims.
+**Stage:** product requirements baseline. The M0 atlas prototype is implemented; most capabilities below remain requirements or proposals. [M0](M0.md) records exactly what is available.
 
 ## 1. Purpose and audience
 

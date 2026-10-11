@@ -1,8 +1,10 @@
 # Roadmap and engineering acceptance
 
-**Status:** implementation is not started. This roadmap is a sequence of achievable increments, not a promise of dates.
+**Status:** M0 implemented and locally verified on 2026-10-11; M1 onward remains planned. This roadmap is a sequence of achievable increments, not a promise of dates. See [M0 evidence and limitations](M0.md).
 
 ## M0 — Foundation and clickable prototype [P0]
+
+**Implemented.** Local development and production browser checks pass. Landmarks are session-only until M1; this milestone does not claim save/load or scientific terrain generation.
 
 **Goal:** get a working editor rather than a huge framework of placeholders.
 
