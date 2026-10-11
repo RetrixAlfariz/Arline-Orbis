@@ -44,6 +44,10 @@ Accept when:
 
 ## M2 — Authoring and regional cartography [P1]
 
+**Incremental progress:** initial standalone world creation, geodesic elevation brushes, measured elevation cross-sections, globe geometry relief, and original Natural/Survey atlas palettes are implemented in [M2](M2.md). More complete point/line/polygon tools, regional tile detail and projections remain on the roadmap.
+
+
+
 Deliver:
 - Geographic point/line/polygon brushes with undo and selected-feature inspector.
 - Terrain/bathymetry authoring with regeneration conflict preview.

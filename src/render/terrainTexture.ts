@@ -1,24 +1,39 @@
 import type { ElevationRaster } from '../terrain/sample';
 
+export type AtlasStyle = 'natural' | 'survey';
+
+/** Original Orbis palettes: geographic blue and verdant vellum; alternate archival survey ink. */
 const stops: [number, [number, number, number]][] = [
-  [-9000, [21, 42, 55]], [-5000, [32, 64, 79]], [-2500, [45, 94, 110]],
-  [-1, [94, 145, 147]], [0, [165, 183, 152]], [450, [142, 165, 135]],
-  [1800, [114, 145, 115]], [3400, [164, 165, 127]], [6000, [221, 215, 184]],
+  [-9000, [18, 48, 83]], [-6500, [29, 73, 112]], [-4500, [44, 102, 144]],
+  [-2400, [72, 139, 172]], [-900, [111, 176, 195]], [-1, [161, 206, 207]],
+  [0, [227, 213, 177]], [200, [221, 209, 162]], [650, [198, 204, 144]],
+  [1500, [151, 176, 120]], [2900, [161, 152, 121]],
+  [4300, [185, 174, 158]], [6000, [242, 236, 221]],
+];
+const surveyStops: typeof stops = [
+  [-9000, [86, 124, 143]], [-6500, [121, 154, 163]], [-4500, [159, 183, 187]],
+  [-2400, [191, 209, 210]], [-900, [217, 226, 220]], [-1, [224, 233, 230]],
+  [0, [248, 243, 229]], [200, [247, 243, 231]], [650, [239, 232, 215]],
+  [1500, [222, 210, 190]], [2900, [204, 191, 174]],
+  [4300, [188, 176, 160]], [6000, [239, 231, 218]],
 ];
 
-export function elevationColor(elevation: number): [number, number, number] {
-  for (let i = 1; i < stops.length; i++) {
-    if (elevation <= stops[i][0]) {
-      const [low, a] = stops[i - 1];
-      const [high, b] = stops[i];
+export function elevationColor(elevation: number, style: AtlasStyle = 'natural'): [number, number, number] {
+  const palette = style === 'survey' ? surveyStops : stops;
+  for (let i = 1; i < palette.length; i++) {
+    if (elevation <= palette[i][0]) {
+      const [low, a] = palette[i - 1];
+      const [high, b] = palette[i];
       const fraction = Math.max(0, (elevation - low) / (high - low));
       return a.map((value, channel) => Math.round(value + (b[channel] - value) * fraction)) as [number, number, number];
     }
   }
-  return stops[stops.length - 1][1];
+  return palette[palette.length - 1][1];
 }
 
-export function terrainTexture(raster: ElevationRaster, options = { seaLevel: 0, showWater: true, bathymetry: false }): HTMLCanvasElement {
+export function terrainTexture(raster: ElevationRaster, options: {
+  seaLevel: number; showWater: boolean; bathymetry: boolean; style?: AtlasStyle;
+} = { seaLevel: 0, showWater: true, bathymetry: false }): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = raster.width;
   canvas.height = raster.height;
@@ -29,9 +44,11 @@ export function terrainTexture(raster: ElevationRaster, options = { seaLevel: 0,
     const height = raster.samples[i];
     const wet = height < options.seaLevel;
     const relative = options.bathymetry && wet ? height - options.seaLevel : height;
-    const [r, g, b] = !options.showWater && wet ? elevationColor(Math.max(0, height + 9000) / 3)
-      : wet ? elevationColor(Math.min(-1, relative - (options.bathymetry ? 0 : options.seaLevel)))
-      : options.bathymetry && options.showWater ? [139, 153, 126] : elevationColor(Math.max(0, height - options.seaLevel));
+    const style = options.style ?? 'natural';
+    const [r, g, b] = !options.showWater && wet ? elevationColor(Math.max(0, height + 9000) / 3, style)
+      : wet ? elevationColor(Math.min(-1, relative - (options.bathymetry ? 0 : options.seaLevel)), style)
+      : options.bathymetry && options.showWater ? (style === 'survey' ? [229, 225, 210] : [192, 188, 144])
+      : elevationColor(Math.max(0, height - options.seaLevel), style);
     const column = i % raster.width;
     const row = Math.floor(i / raster.width);
     const left = raster.samples[i - column + (column + raster.width - 1) % raster.width];
@@ -39,7 +56,9 @@ export function terrainTexture(raster: ElevationRaster, options = { seaLevel: 0,
     const north = raster.samples[Math.max(0, row - 1) * raster.width + column];
     const south = raster.samples[Math.min(raster.height - 1, row + 1) * raster.width + column];
     // Display-only northwest relief. Never modify authoritative elevation samples.
-    const relief = Math.max(0.76, Math.min(1.16, 1 + (right - left + south - north) / 2200));
+    // Northwest-illuminated cartographic relief, display-only. Shadowed steep sides
+    // remain readable on both sea floor and mountains; geometry is not modified.
+    const relief = Math.max(0.72, Math.min(1.18, 1 + (right - left + south - north) / 1950));
     image.data.set([Math.min(255, r * relief), Math.min(255, g * relief), Math.min(255, b * relief), 255], i * 4);
   }
   context.putImageData(image, 0, 0);
@@ -48,8 +67,8 @@ export function terrainTexture(raster: ElevationRaster, options = { seaLevel: 0,
   // The last column wraps to the first; the texture edge remains geographic, not a border.
   const coast = options.seaLevel;
   const levels = [...new Set(options.bathymetry && options.showWater
-    ? [coast - 6000, coast - 4000, coast - 2000, coast - 1000, coast]
-    : [-6000, -4000, -2000, -1000, coast, 1000, 2000, 4000])];
+    ? [coast - 9000, coast - 7500, coast - 6000, coast - 4500, coast - 3000, coast - 2000, coast - 1000, coast]
+    : [-9000, -7500, -6000, -4500, -3000, -2000, -1000, coast, coast + 250, coast + 750, coast + 1500, coast + 2500, coast + 4000, coast + 5500])];
   for (const level of levels) {
     context.beginPath();
     for (let y = 0; y < raster.height - 1; y++) {
@@ -77,7 +96,9 @@ export function terrainTexture(raster: ElevationRaster, options = { seaLevel: 0,
         }
       }
     }
-    context.strokeStyle = level === coast ? 'rgba(235, 225, 181, 0.65)' : level < coast && options.showWater ? 'rgba(165, 205, 210, 0.18)' : 'rgba(77, 75, 46, 0.17)';
+    context.strokeStyle = level === coast ? (options.style === 'survey' ? 'rgba(89, 101, 95, 0.8)' : 'rgba(233, 226, 182, 0.8)')
+      : level < coast && options.showWater ? (options.style === 'survey' ? 'rgba(62, 102, 117, 0.35)' : 'rgba(212, 235, 226, 0.32)')
+      : (options.style === 'survey' ? 'rgba(86, 77, 66, 0.3)' : 'rgba(91, 80, 58, 0.27)');
     context.lineWidth = level === coast ? 2 : 0.5;
     context.stroke();
     if (level === coast) {

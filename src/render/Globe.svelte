@@ -1,10 +1,13 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { Coordinate, Landmark } from '../core/world';
+  import type { ElevationRaster } from '../terrain/sample';
   import type { createGlobe } from './globe';
 
-  let { texture, selection, landmarks, onselect, onhover, onerror }: {
+  let { texture, raster, radius_m, selection, landmarks, onselect, onhover, onerror }: {
     texture: HTMLCanvasElement;
+    raster: ElevationRaster;
+    radius_m: number;
     selection: Coordinate | null;
     landmarks: Landmark[];
     onselect: (point: Coordinate) => void;
@@ -20,7 +23,7 @@
     import('./globe').then(({ createGlobe }) => {
       if (cancelled) return;
       try {
-        controller = createGlobe(host, texture, onselect, onhover, onerror);
+        controller = createGlobe(host, texture, raster, radius_m, onselect, onhover, onerror);
         loading = false;
       } catch {
         onerror('WebGL is unavailable on this browser. Continue exploring in the 2D atlas.');
@@ -31,6 +34,7 @@
 
   $effect(() => { controller?.update(selection, landmarks); });
   $effect(() => { controller?.setTexture(texture); });
+  $effect(() => { controller?.setTerrain(raster, radius_m); });
 </script>
 
 <div class="globe" bind:this={host}>

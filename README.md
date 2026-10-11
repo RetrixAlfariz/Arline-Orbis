@@ -4,7 +4,7 @@
 
 **Arline Orbis** is a planned, local-first, lightweight planetary atlas for storytellers. It shares the broader Arline identity, but is being designed and built as a **fully standalone application**. Direct [Arline Studio](https://github.com/RetrixAlfariz/Arline-Studio) integration is a **distant, unscheduled possibility**, not part of the current delivery plan. Its purpose is **story continuity and authoring**, not game-world simulation for its own sake.
 
-**Status: M0 + M1 implemented — local 2D/3D atlas MVP.** Explore seeded terrain, author and lock landmarks, autosave locally, export/reopen projects, measure distances and inspect water depth. See the [M1 implementation report](docs/M1.md) for validation and practical boundaries, and [M0](docs/M0.md) for the original foundation.
+**Status: M0 + M1 implemented; initial M2 authoring and cartographic refinement added.** The local atlas now supports creating independent seeded worlds, geodesic terrain sculpting, elevation cross-sections, bounded 3D relief, and two original map palettes, alongside the existing persistence and landmark workflows. See [M2](docs/M2.md) for the implementation and limitations; [M1](docs/M1.md) and [M0](docs/M0.md) document the earlier foundations.
 
 ## Run locally
 
@@ -55,8 +55,8 @@ A fantasy world is more than coastlines and country borders. It has real distanc
 | Domain | Initial scope | Later expansion |
 | --- | --- | --- |
 | Planetary scale | Configurable radius, coordinate readout, distance tools | Ellipsoids, multiple exotic geometries |
-| Maps | 2D equirectangular projection, globe, terrain coloring | Equal Earth, regional projections, map styles |
-| Terrain | Global height/elevation model, regional inspection | Tectonics, erosion, sophisticated LOD |
+| Maps | 2D equirectangular projection, globe, Natural/Survey palettes, profiles | Equal Earth, additional regional projections |
+| Terrain | Global elevation plus persistent authored geodesic brushes, 3D relief | Tectonics, erosion, sophisticated LOD |
 | Oceans | Full seafloor elevation, shelves, ridges, trenches, bathymetric styling | Seabed generation, hydrology, water-column ecology |
 | Underground | Documented depth model and stable place links | Cave networks, cross-sections, localized 3D caverns |
 | Worldbuilding | Locations, labels, notes, editable/locked features | History and world-branch visualization |
@@ -76,6 +76,7 @@ See [Architecture](docs/ARCHITECTURE.md) for boundaries and engineering decision
 
 ## Documentation
 
+- [M2 implemented authoring and cartographic changes](docs/M2.md)
 - [Product specification and scope](docs/PRODUCT_SPEC.md)
 - [System architecture and rendering strategy](docs/ARCHITECTURE.md)
 - [Proposed geographic and story data contract](docs/DATA_MODEL.md)
@@ -101,4 +102,4 @@ This repository's **own software license has not yet been chosen**. Before copyi
 
 ---
 
-**Project stage:** M0 + M1 local MVP implemented by Opheline • **Mission:** Give every story a world.
+**Project stage:** M0 + M1 baseline, early M2 geographic editing and cartography implemented • **Mission:** Give every story a world.

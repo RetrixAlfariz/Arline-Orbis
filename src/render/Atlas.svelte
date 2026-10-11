@@ -3,12 +3,17 @@
   import type { Coordinate, Landmark } from '../core/world';
   import { coordinate, fromUV, toUV } from '../geo/coordinates';
 
-  let { texture, selection, landmarks, showGrid, showLabels, onselect, onhover }: {
+  let { texture, selection, landmarks, showGrid, showLabels, worldName, sampleRegions, sculptMode, brushRadiusKm, planetRadius_m, onselect, onhover }: {
     texture: HTMLCanvasElement;
     selection: Coordinate | null;
     landmarks: Landmark[];
     showGrid: boolean;
     showLabels: boolean;
+    worldName: string;
+    sampleRegions: boolean;
+    sculptMode: boolean;
+    brushRadiusKm: number;
+    planetRadius_m: number;
     onselect: (point: Coordinate) => void;
     onhover: (point: Coordinate | null) => void;
   } = $props();
@@ -97,7 +102,7 @@
 <!-- Custom geographic widget: focus, Enter and arrow-key navigation are implemented above. -->
 <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
 <svg bind:this={surface} class="atlas" viewBox={`${originX} ${originY} ${1050 / zoom} ${550 / zoom}`} role="application" tabindex="0"
-  aria-label="2D planetary atlas. Click to select; arrow keys move selection, Shift moves ten degrees."
+  aria-label={sculptMode ? '2D atlas in sculpt mode. Click terrain to apply elevation stroke. Drag to pan.' : '2D planetary atlas. Click to select; arrow keys move selection, Shift moves ten degrees.'}
   onpointerdown={down} onpointermove={move} onpointerup={() => drag = null} onpointercancel={() => { drag = null; dragged = false; }} onpointerleave={() => onhover(null)}
   onclick={(event) => { if (dragged) { dragged = false; return; } const selected = point(event); if (selected) onselect(selected); }}
   onkeydown={key}>
@@ -113,10 +118,10 @@
       <text x="-12" y={(90 - latitude) / 180 * height + 3} text-anchor="middle" transform={`rotate(-90,-12,${(90 - latitude) / 180 * height + 3})`}>{Math.abs(latitude)}°{latitude === 0 ? '' : latitude < 0 ? 'S' : 'N'}</text>
     {/each}
 
-    <text x="15" y="518">AURELIA · SAMPLE ATLAS</text>
+    <text x="15" y="518">{worldName.toUpperCase()} · PLANETARY ATLAS</text>
     <text x="985" y="518" text-anchor="end">ELEVATIONS IN METERS</text>
   </g>
-  {#if showLabels}<g data-testid="atlas-region-labels" pointer-events="none" aria-hidden="true">
+  {#if showLabels && sampleRegions}<g data-testid="atlas-region-labels" pointer-events="none" aria-hidden="true">
     {#each regions as region}
       {@const uv = toUV(region)}
       <text transform={`translate(${uv.u * width},${uv.v * height}) rotate(${region.angle})`} text-anchor="middle" class:map-ocean-label={region.ocean} class:map-region-label={!region.ocean}>{region.name}</text>
@@ -135,6 +140,13 @@
   {/each}
   {#if selection}
     {@const uv = toUV(selection)}
+    {#if sculptMode}
+      {@const angularRadius = Math.min(Math.PI, brushRadiusKm * 1000 / planetRadius_m)}
+      <ellipse cx={uv.u * width} cy={uv.v * height}
+        rx={Math.min(500, angularRadius / (2 * Math.PI) * width / Math.max(0.08, Math.cos(selection.lat_deg * Math.PI / 180)))}
+        ry={angularRadius / Math.PI * height}
+        fill="#ad473d" fill-opacity=".1" stroke="#b7372e" stroke-width="1.8" stroke-dasharray="5 4" pointer-events="none"/>
+    {/if}
     <g transform={`translate(${uv.u * width},${uv.v * height})`} pointer-events="none">
       <circle r="10" fill="none" stroke="#ffd198" stroke-width="2" />
       <circle r="2" fill="#ffd198" />
