@@ -28,6 +28,41 @@
   ];
   const image = $derived(texture.toDataURL());
   let surface: SVGSVGElement;
+  let zoom = $state(1);
+  let originX = $state(-25);
+  let originY = $state(-25);
+  let drag: { x: number; y: number; originX: number; originY: number; inverse: DOMMatrix; id: number } | null = null;
+  let dragged = false;
+  function constrain() {
+    originX = Math.max(-25, Math.min(1025 - 1050 / zoom, originX));
+    originY = Math.max(-25, Math.min(525 - 550 / zoom, originY));
+  }
+  function magnify(factor: number) {
+    const next = Math.max(1, Math.min(8, zoom * factor));
+    originX += (1050 / zoom - 1050 / next) / 2;
+    originY += (550 / zoom - 550 / next) / 2;
+    zoom = next; constrain();
+  }
+  function reset() { zoom = 1; originX = -25; originY = -25; }
+  function down(event: PointerEvent) {
+    if (event.button !== 0 || (event.target as Element).closest('[role="button"]')) return;
+    const matrix = surface.getScreenCTM(); if (!matrix) return;
+    event.preventDefault(); surface.focus({ preventScroll: true });
+    drag = { x: event.clientX, y: event.clientY, originX, originY, inverse: matrix.inverse(), id: event.pointerId };
+    dragged = false;
+    surface.setPointerCapture(event.pointerId);
+  }
+  function move(event: PointerEvent) {
+    if (drag && event.pointerId === drag.id) {
+      if (Math.hypot(event.clientX - drag.x, event.clientY - drag.y) > 5) dragged = true;
+      if (dragged) {
+        const start = new DOMPoint(drag.x, drag.y).matrixTransform(drag.inverse);
+        const end = new DOMPoint(event.clientX, event.clientY).matrixTransform(drag.inverse);
+        originX = drag.originX + start.x - end.x; originY = drag.originY + start.y - end.y; constrain();
+      }
+    }
+    onhover(point(event));
+  }
 
   function point(event: MouseEvent): Coordinate | null {
     const matrix = surface.getScreenCTM();
@@ -47,6 +82,9 @@
       event.preventDefault();
       const [lat, lon] = offsets[event.key];
       onselect(coordinate(Math.max(-90, Math.min(90, current.lat_deg + lat)), current.lon_deg + lon));
+    } else if (event.key === '+' || event.key === '=') { event.preventDefault(); magnify(1.5);
+    } else if (event.key === '-') { event.preventDefault(); magnify(1 / 1.5);
+    } else if (event.key === '0') { event.preventDefault(); reset();
     } else if (event.key === 'Enter') {
       event.preventDefault();
       onselect(current);
@@ -54,12 +92,14 @@
   }
 </script>
 
+<div class="atlas-navigation" aria-label="Atlas navigation"><button aria-label="Zoom in atlas" disabled={zoom >= 8} onclick={() => magnify(1.5)}>+</button><button aria-label="Zoom out atlas" disabled={zoom <= 1} onclick={() => magnify(1 / 1.5)}>−</button><button aria-label="Reset atlas view" onclick={reset}>{zoom.toFixed(1)}×</button></div>
+
 <!-- Custom geographic widget: focus, Enter and arrow-key navigation are implemented above. -->
 <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
-<svg bind:this={surface} class="atlas" viewBox="-25 -25 1050 550" role="application" tabindex="0"
+<svg bind:this={surface} class="atlas" viewBox={`${originX} ${originY} ${1050 / zoom} ${550 / zoom}`} role="application" tabindex="0"
   aria-label="2D planetary atlas. Click to select; arrow keys move selection, Shift moves ten degrees."
-  onpointermove={(event) => onhover(point(event))} onpointerleave={() => onhover(null)}
-  onclick={(event) => { const selected = point(event); if (selected) onselect(selected); }}
+  onpointerdown={down} onpointermove={move} onpointerup={() => drag = null} onpointercancel={() => { drag = null; dragged = false; }} onpointerleave={() => onhover(null)}
+  onclick={(event) => { if (dragged) { dragged = false; return; } const selected = point(event); if (selected) onselect(selected); }}
   onkeydown={key}>
   <rect x="-25" y="-25" width="1050" height="550" fill="#d9d4ba" />
   <path d="M0,-25V525 M1000,-25V525 M-25,0H1025 M-25,500H1025" fill="none" stroke="#7f8e84" stroke-width="0.7" />

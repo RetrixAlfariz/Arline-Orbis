@@ -2,6 +2,17 @@ import type { Coordinate } from '../core/world';
 
 const radians = Math.PI / 180;
 
+/** Shortest great-circle distance on the configured spherical world, in kilometers. */
+export function distanceKm(a: Coordinate, b: Coordinate, radius_m: number): number {
+  if (!Number.isFinite(radius_m) || radius_m <= 0) throw new Error('Radius must be positive.');
+  const start = coordinate(a.lat_deg, a.lon_deg);
+  const end = coordinate(b.lat_deg, b.lon_deg);
+  const lat = (end.lat_deg - start.lat_deg) * radians;
+  const lon = normalizeLongitude(end.lon_deg - start.lon_deg) * radians;
+  const h = Math.sin(lat / 2) ** 2 + Math.cos(start.lat_deg * radians) * Math.cos(end.lat_deg * radians) * Math.sin(lon / 2) ** 2;
+  return 2 * Math.atan2(Math.sqrt(Math.max(0, Math.min(1, h))), Math.sqrt(Math.max(0, 1 - h))) * radius_m / 1000;
+}
+
 export function normalizeLongitude(longitude: number): number {
   if (!Number.isFinite(longitude)) throw new Error('Longitude must be finite.');
   return ((longitude + 180) % 360 + 360) % 360 - 180;

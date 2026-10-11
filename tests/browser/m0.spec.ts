@@ -9,7 +9,7 @@ test('names a landmark, preserves its anchor between views and raycasts the glob
   await expect(page.getByTestId('latitude')).toHaveText('30.0000°');
   await expect(page.getByTestId('longitude')).toHaveText('-55.0000°');
   const height = await page.getByTestId('elevation').innerText();
-  await page.getByLabel('LANDMARK NAME', { exact: true }).fill('Vian’s Observatory');
+  await page.getByLabel('Landmark name', { exact: true }).fill('Vian’s Observatory');
   await page.getByRole('button', { name: 'Set landmark', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Vian’s Observatory' })).toBeVisible();
   // Display layers must not alter the shared authored anchor or hide authored markers.
@@ -47,13 +47,14 @@ test('names a landmark, preserves its anchor between views and raycasts the glob
   await expect(page.getByTestId('latitude')).toHaveText('30.0000°');
   await page.getByRole('button', { name: '2D Atlas', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Select Vian’s Observatory', exact: true })).toBeVisible();
-  await page.getByLabel('LANDMARK NAME', { exact: true }).fill('Crown Observatory');
+  await page.getByLabel('Landmark name', { exact: true }).fill('Crown Observatory');
   await page.getByRole('button', { name: 'Update landmark', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Select Crown Observatory', exact: true })).toBeVisible();
   await page.screenshot({ path: 'test-results/m0-atlas.png', fullPage: true });
+  await expect(page.getByText('Saved locally', { exact: true })).toBeVisible();
   await page.reload();
   await expect(page.getByRole('application')).toBeVisible();
-  await expect(page.getByText('Your named places will appear here.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Select Crown Observatory', exact: true })).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -75,6 +76,7 @@ test('atlas pointer, keyboard, seam coordinates and seabed fixtures work without
   await expect(page.getByRole('application')).toBeVisible();
   await page.getByRole('button', { name: /Veil trench/ }).click();
   await expect(page.getByTestId('latitude')).toHaveText('-20.0000°');
+  await page.getByText('Go to coordinates', { exact: true }).click();
   await page.getByLabel('Latitude', { exact: true }).fill('90');
   await page.getByLabel('Longitude', { exact: true }).fill('180');
   await page.getByRole('button', { name: 'Inspect position', exact: true }).click();
@@ -105,7 +107,7 @@ test('mobile layout fits and app requests no external service', async ({ page })
 test('graphics context loss returns to the atlas without losing a landmark', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: /Lantern ridge/ }).click();
-  await page.getByLabel('LANDMARK NAME', { exact: true }).fill('Ridge station');
+  await page.getByLabel('Landmark name', { exact: true }).fill('Ridge station');
   await page.getByRole('button', { name: 'Set landmark', exact: true }).click();
   await page.getByRole('button', { name: '3D Globe', exact: true }).click();
   await expect(page.locator('.globe canvas')).toBeVisible();

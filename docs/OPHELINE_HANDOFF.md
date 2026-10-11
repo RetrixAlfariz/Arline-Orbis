@@ -2,7 +2,7 @@
 
 **Owner of implementation and subsequent polish:** Opheline.
 
-**Aestem's role in this baseline:** capture agreed intent, inspect upstream compatibility, lay out technical constraints and acceptance tests. The original handoff was specification-first. Opheline has now implemented M0; see the [implementation report](M0.md). The remaining instructions describe subsequent work, not completed features.
+**Aestem's role in this baseline:** capture agreed intent, inspect upstream compatibility, lay out technical constraints and acceptance tests. The original handoff was specification-first. Opheline has now implemented M0 and M1; see the [M1 implementation report](M1.md) and historical [M0 report](M0.md). The remaining instructions describe the development baseline and subsequent work.
 
 ## Objective
 

@@ -30,6 +30,7 @@
   });
 
   $effect(() => { controller?.update(selection, landmarks); });
+  $effect(() => { controller?.setTexture(texture); });
 </script>
 
 <div class="globe" bind:this={host}>

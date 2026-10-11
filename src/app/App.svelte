@@ -1,59 +1,218 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { SAMPLE_PLANET, createLandmark } from '../core/world';
-  import type { Coordinate, Landmark, Position } from '../core/world';
-  import { coordinate } from '../geo/coordinates';
+  import { createLandmark } from '../core/world';
+  import type { Coordinate, Position } from '../core/world';
+  import { coordinate, distanceKm } from '../geo/coordinates';
+  import { newProject, decodeProject, anchorKey, waterDepth, MAX_PROJECT_BYTES } from '../core/project';
+  import type { Project } from '../core/project';
+  import { loadWorkspace, saveWorkspace } from '../core/storage';
+  import type { Snapshot } from '../core/storage';
   import { generateSample, sampleElevation, SAMPLE_SITES } from '../terrain/sample';
   import { terrainTexture } from '../render/terrainTexture';
   import Atlas from '../render/Atlas.svelte';
   import Globe from '../render/Globe.svelte';
 
-  const planet = SAMPLE_PLANET;
-  const started = performance.now();
-  const raster = generateSample(planet.seed);
-  const generationMs = performance.now() - started;
+  let project = $state<Project>(newProject());
+  const planet = $derived(project.planet);
+  const terrain = $derived.by(() => { const start = performance.now(); const raster = generateSample(planet.seed); return { raster, ms: performance.now() - start }; });
+  const raster = $derived(terrain.raster);
+  const groundElevation = $derived(sampleElevation(raster, project.selection));
+  const generationMs = $derived(terrain.ms);
   let texture = $state<HTMLCanvasElement | null>(null);
   let mode = $state<'atlas' | 'globe'>('atlas');
   let showGrid = $state(true);
   let showLabels = $state(true);
-  let selection = $state<Position | null>(null);
+  const selection = $derived<Position>({ ...project.selection, altitude_m: project.landmarks.find((l) => anchorKey(l.position) === anchorKey(project.selection))?.position.altitude_m ?? sampleElevation(raster, project.selection) });
   let hover = $state<Coordinate | null>(null);
-  let landmarks = $state<Landmark[]>([]);
-  let name = $state('');
+  const landmarks = $derived(project.landmarks);
+  const draft = $derived(project.drafts.find((d) => anchorKey(d) === anchorKey(project.selection)));
+  const authoredElevation = $derived(draft?.altitude_m ?? selection.altitude_m);
   let error = $state('');
   let graphicsError = $state('');
   let latitude = $state(30);
   let longitude = $state(-55);
   let notice = $state('');
+  let ready = $state(false);
+  let saveState = $state('Loading local world…');
+  let storageError = $state('');
+  let revision = 0;
+  let history = $state<Snapshot[]>([]);
+  let recovered = $state<Snapshot[]>([]);
+  let saving = false;
+  let pending = false;
+  let journalKey = '';
+  let search = $state('');
+  let radiusKm = $state(6371);
+  let seaLevel = $state(0);
+  let seed = $state('aurelia-001');
+  let showWater = $state(true);
+  let bathymetry = $state(false);
+  let measureStart = $state<Coordinate | null>(null);
+  let recoveryIndex = $state('');
+  let importInput: HTMLInputElement;
+  const recoveryItems = $derived([...history, ...recovered]);
+  const visibleLandmarks = $derived(landmarks.filter((l) => l.name.toLowerCase().includes(search.toLowerCase())));
   let selectedLandmark = $derived(landmarks.find((landmark) => selection &&
     landmark.position.lat_deg === selection.lat_deg && landmark.position.lon_deg === selection.lon_deg));
   let selectedSite = $derived(SAMPLE_SITES.find((site) => selection &&
     site.lat_deg === selection.lat_deg && site.lon_deg === selection.lon_deg));
+  const name = $derived(draft?.name ?? selectedLandmark?.name ?? '');
 
-  onMount(() => { texture = terrainTexture(raster); select(SAMPLE_SITES[0]); });
+  $effect(() => { if (ready) texture = terrainTexture(raster, { seaLevel: planet.sea_level_m, showWater, bathymetry }); });
+  $effect(() => { latitude = project.selection.lat_deg; longitude = project.selection.lon_deg; });
+  $effect(() => { radiusKm = planet.radius_m / 1000; seaLevel = planet.sea_level_m; seed = planet.seed; });
+  const copy = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
+  onMount(() => {
+    let active = true;
+    (async () => {
+      try {
+        const saved = await loadWorkspace();
+        if (!active) return;
+        if (saved) { project = saved.project; history = saved.history; recovered = saved.backups ?? []; revision = saved.revision; }
+        // A duplicated browser tab can inherit sessionStorage. Each document gets its own journal
+        // so one tab cannot remove or overwrite another tab's pending changes.
+        const previousTabId = sessionStorage.getItem('orbis-tab');
+        const tabId = crypto.randomUUID();
+        sessionStorage.setItem('orbis-tab', tabId);
+        journalKey = `orbis-journal:${tabId}`;
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i)!;
+          if (!key.startsWith('orbis-journal:')) continue;
+          try {
+            const journal = JSON.parse(localStorage.getItem(key)!);
+            const recoveredProject = decodeProject(journal.project);
+            if (key === `orbis-journal:${previousTabId}` && journal.revision === revision) {
+              project = recoveredProject;
+              if (Array.isArray(journal.history)) history = journal.history.slice(-30).map((s: Snapshot) => ({ ...s, project: decodeProject(s.project) }));
+              if (Array.isArray(journal.backups)) recovered = journal.backups.slice(-30).map((s: Snapshot) => ({ ...s, project: decodeProject(s.project) }));
+              notice = 'Recovered your unfinished local changes.'; pending = true;
+            } else recovered = [...recovered, { project: recoveredProject, at: journal.at, label: 'Unfinished workspace backup' }];
+          } catch { storageError = 'An unreadable recovery backup was preserved in local storage.'; }
+        }
+        saveState = saved ? 'Saved locally' : 'Ready to save locally';
+      } catch (cause) {
+        storageError = `Local storage could not be opened: ${(cause as Error).message} Export changes before closing.`;
+        saveState = 'Local save unavailable';
+      } finally { if (active) { ready = true; if (pending) void flush(); } }
+    })();
+    const unload = (event: BeforeUnloadEvent) => { if (pending || saving || storageError) { event.preventDefault(); event.returnValue = ''; } };
+    window.addEventListener('beforeunload', unload);
+    return () => { active = false; window.removeEventListener('beforeunload', unload); };
+  });
+
+  function persist() {
+    pending = true; saveState = 'Saving…';
+    try { if (journalKey) localStorage.setItem(journalKey, JSON.stringify({ project, history, backups: recovered, revision, at: new Date().toISOString() })); }
+    catch { storageError = 'Emergency backup is unavailable. Keep this tab open until the local save completes, or export.'; }
+    if (ready) void flush();
+  }
+  async function flush() {
+    if (saving || !pending || !ready || saveState === 'Save conflict') return;
+    saving = true;
+    try {
+      while (pending) {
+        pending = false;
+        revision = await saveWorkspace(copy(project), copy(history), revision, copy(recovered));
+        if (pending) {
+          if (journalKey) localStorage.setItem(journalKey, JSON.stringify({ project, history, backups: recovered, revision, at: new Date().toISOString() }));
+        } else { if (journalKey) localStorage.removeItem(journalKey); saveState = 'Saved locally'; storageError = ''; }
+      }
+    } catch (cause) {
+      pending = true;
+      storageError = (cause as Error).message;
+      saveState = storageError.includes('Another tab') ? 'Save conflict' : 'Local save failed';
+    } finally { saving = false; }
+  }
+  function change(next: Project, label: string) {
+    if (!withinLimit(next)) return;
+    history = [...history, { project: copy(project), at: new Date().toISOString(), label }].slice(-30);
+    project = next; error = ''; notice = label; persist();
+  }
+  function withinLimit(next: Project): boolean {
+    if (new TextEncoder().encode(JSON.stringify(next)).length <= MAX_PROJECT_BYTES) return true;
+    error = 'This edit exceeds the 2 MB project limit. Export a backup and reduce project metadata first.'; return false;
+  }
 
   function select(point: Coordinate) {
-    selection = { ...coordinate(point.lat_deg, point.lon_deg), altitude_m: sampleElevation(raster, point) };
-    latitude = selection.lat_deg;
-    longitude = selection.lon_deg;
-    name = landmarks.find((landmark) => landmark.position.lat_deg === point.lat_deg &&
-      landmark.position.lon_deg === point.lon_deg)?.name ?? '';
+    if (!ready) return;
+    const next = { ...project, selection: coordinate(point.lat_deg, point.lon_deg) };
+    if (!withinLimit(next)) return;
+    project = next;
     error = '';
     notice = '';
+    persist();
   }
   function goTo() {
     try { select(coordinate(latitude, longitude)); } catch (cause) { error = (cause as Error).message; }
   }
   function saveLandmark() {
-    if (!selection) return;
+    if (!ready || selectedLandmark?.locked) return;
     try {
+      if (!selectedLandmark && landmarks.length >= 1000) throw new Error('Maximum 1,000 landmarks per project.');
+      if (!Number.isFinite(authoredElevation) || Math.abs(authoredElevation) > 20000) throw new Error('Elevation must be between −20,000 and +20,000 m.');
       const updating = selectedLandmark !== undefined;
-      const landmark = createLandmark(name, selection, selectedLandmark?.id ?? crypto.randomUUID());
-      landmarks = selectedLandmark ? landmarks.map((item) => item.id === landmark.id ? landmark : item) : [...landmarks, landmark];
-      name = landmark.name;
-      error = '';
-      notice = `${landmark.name} ${updating ? 'updated' : 'added'} for this session.`;
+      const landmark = { ...selectedLandmark, ...createLandmark(name, { ...selectedLandmark?.position, ...selection, altitude_m: authoredElevation }, selectedLandmark?.id ?? crypto.randomUUID()), locked: false };
+      change({ ...project, landmarks: updating ? landmarks.map((item) => item.id === landmark.id ? landmark : item) : [...landmarks, landmark],
+        drafts: project.drafts.filter((d) => anchorKey(d) !== anchorKey(selection)) }, `${landmark.name} ${updating ? 'updated' : 'added'}.`);
     } catch (cause) { error = (cause as Error).message; }
+  }
+  function editDraft(nextName: string, altitude_m: number) {
+    if (!ready || selectedLandmark?.locked) return;
+    if (!Number.isFinite(altitude_m) || Math.abs(altitude_m) > 20000) { error = 'Elevation must be between −20,000 and +20,000 m.'; return; }
+    error = '';
+    const drafts = project.drafts.filter((d) => anchorKey(d) !== anchorKey(selection));
+    if (drafts.length >= 1000) { error = 'Maximum 1,000 unfinished drafts. Save or discard some drafts first.'; return; }
+    const next = { ...project, drafts: [...drafts, { ...project.selection, name: nextName, altitude_m }] };
+    if (!withinLimit(next)) return;
+    project = next; persist();
+  }
+  function discardDraft() { project = { ...project, drafts: project.drafts.filter((d) => anchorKey(d) !== anchorKey(selection)) }; persist(); }
+  function lockLandmark() {
+    if (!selectedLandmark) return;
+    change({ ...project, landmarks: landmarks.map((l) => l.id === selectedLandmark!.id ? { ...l, locked: !l.locked } : l) }, selectedLandmark.locked ? 'Landmark unlocked.' : 'Landmark locked.');
+  }
+  function deleteLandmark() {
+    if (!selectedLandmark || selectedLandmark.locked) return;
+    change({ ...project, landmarks: landmarks.filter((l) => l.id !== selectedLandmark!.id), drafts: project.drafts.filter((d) => anchorKey(d) !== anchorKey(selection)) }, 'Landmark deleted. Undo is available.');
+  }
+  function moveLandmark() {
+    if (!selectedLandmark || selectedLandmark.locked) return;
+    try {
+      const position = { ...coordinate(latitude, longitude), altitude_m: selectedLandmark.position.altitude_m };
+      if (landmarks.some((l) => l.id !== selectedLandmark!.id && anchorKey(l.position) === anchorKey(position))) throw new Error('There is already a landmark at that position.');
+      change({ ...project, selection: position, landmarks: landmarks.map((l) => l.id === selectedLandmark!.id ? { ...l, position } : l) }, 'Landmark moved; authored elevation preserved.');
+    } catch (cause) { error = (cause as Error).message; }
+  }
+  function applySettings() {
+    try {
+      const next = decodeProject({ ...copy(project), planet: { ...planet, seed, radius_m: radiusKm * 1000, sea_level_m: seaLevel } });
+      change(next, 'World settings updated. Authored anchors preserved.');
+    } catch (cause) { error = (cause as Error).message; }
+  }
+  function undo() {
+    const previous = history.at(-1); if (!previous) return;
+    // Keep a forward snapshot in recovery so undo itself is recoverable.
+    recovered = [...recovered, { project: copy(project), at: new Date().toISOString(), label: 'Before undo' }].slice(-30);
+    history = history.slice(0, -1); project = copy(previous.project); notice = `Undid: ${previous.label}`; persist();
+  }
+  function restore() {
+    const item = recoveryItems[Number(recoveryIndex)]; if (!item) return;
+    change(copy(item.project), `Restored backup from ${new Date(item.at).toLocaleString()}.`); recoveryIndex = '';
+  }
+  function exportProject() {
+    const blob = new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob); const link = document.createElement('a');
+    link.href = url; link.download = 'orbis-world.orbis.json'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    notice = 'Project exported, including authored landmarks, locks and unfinished drafts.';
+  }
+  async function importProject(event: Event) {
+    const input = event.currentTarget as HTMLInputElement; const file = input.files?.[0]; if (!file) return;
+    try {
+      if (file.size > MAX_PROJECT_BYTES) throw new Error('Project exceeds the 2 MB limit.');
+      const next = decodeProject(await file.text());
+      change(next, 'Project imported. Previous world retained in recovery history.');
+    } catch (cause) { error = `Import rejected: ${(cause as Error).message}`; }
+    finally { input.value = ''; }
   }
   function globeError(message: string) {
     graphicsError = message;
@@ -70,53 +229,96 @@
 <svelte:head><meta name="description" content="A local planetary atlas for storytelling. Explore a sample world in 2D and 3D." /></svelte:head>
 
 <header class="app-header">
-  <a class="brand" href="./" aria-label="Arline Orbis home"><svg class="brand-symbol" viewBox="0 0 32 32" fill="none" aria-hidden="true"><circle cx="16" cy="16" r="12" /><ellipse cx="16" cy="16" rx="5" ry="12" /><path d="M4 16h24M7 9h18M7 23h18" /></svg><span>ARLINE <strong>ORBIS</strong></span></a>
-  <span class="header-note">/ PLANETARY ATLAS</span>
-  <span class="local-indicator"><span class="status-dot"></span>LOCAL</span>
-  <span class="stage-tag">M0 · PROTOTYPE</span>
+  <div class="brand" aria-label="Arline Orbis">
+    <svg class="brand-symbol" viewBox="0 0 32 32" fill="none" aria-hidden="true"><circle cx="16" cy="16" r="12" /><ellipse cx="16" cy="16" rx="5" ry="12" /><path d="M4 16h24M7 9h18M7 23h18" /></svg>
+    <span>Orbis<small>by Arline</small></span>
+  </div>
+  <div class="project-path"><span>World atlas</span><span aria-hidden="true">/</span><strong>{planet.name}</strong><span class="sample-badge">Sample</span></div>
+  <span class="local-indicator" role="status"><span class="status-dot"></span>{saveState}</span>
 </header>
 
 <main>
+  <aside class="places-panel" aria-label="Places">
+    <div class="panel-heading"><h2>Places</h2><span class="count">{SAMPLE_SITES.length + landmarks.length}</span></div>
+    <p class="section-label">Sample locations</p>
+    <div class="sample-sites">
+      {#each SAMPLE_SITES as site, index}
+        <button class:chosen={selectedSite === site && !selectedLandmark} aria-pressed={selectedSite === site && !selectedLandmark} onclick={() => select(site)}>
+          <span class="place-symbol" aria-hidden="true">{index === 0 ? '△' : index === 1 ? '≋' : '⌄'}</span>
+          <span class="place-text"><span class="site-name">{site.name}</span><small>{index === 0 ? 'Highland' : index === 1 ? 'Ocean ridge' : 'Deep ocean'}</small></span>
+          <span class="place-arrow" aria-hidden="true">›</span>
+        </button>
+      {/each}
+    </div>
+    <div class="landmark-list">
+      <div class="list-heading"><p class="section-label">Your landmarks</p><span class="count">{landmarks.length}</span></div>
+      <label class="sr-only" for="place-search">Search landmarks</label><input id="place-search" class="place-search" type="search" bind:value={search} placeholder="Search landmarks…" />
+      {#each visibleLandmarks as landmark (landmark.id)}
+        <button class:chosen={landmark.id === selectedLandmark?.id} aria-pressed={landmark.id === selectedLandmark?.id} onclick={() => select(landmark.position)}><span>{landmark.name}{landmark.locked ? ' · Locked' : ''}</span><small>{degrees(landmark.position)}</small></button>
+      {:else}<div class="empty-places"><span aria-hidden="true">⌖</span><p>{search ? 'No matching landmarks.' : 'Your named places will appear here.'}</p><small>Select a position and add a landmark to begin.</small></div>{/each}
+      {#if project.drafts.length}<details class="draft-list"><summary>Unfinished drafts ({project.drafts.length})</summary>{#each project.drafts as d}<button onclick={() => select(d)}><span>{d.name || 'Unnamed draft'}</span><small>{degrees(d)}</small></button>{/each}</details>{/if}
+    </div>
+    <div class="project-actions"><button class="secondary" disabled={!ready} onclick={() => { saveState = 'Saving…'; pending = true; void flush(); }}>Save world</button><div class="action-row"><button disabled={!ready} onclick={exportProject}>Export</button><button disabled={!ready} onclick={() => importInput.click()}>Import</button></div><input hidden bind:this={importInput} type="file" accept=".json,application/json" aria-label="Import project file" onchange={importProject} /><button class="secondary" disabled={!history.length || !ready} onclick={undo}>Undo last edit</button>
+      <details class="recovery-panel"><summary>Recovery history ({recoveryItems.length})</summary><label for="recovery">Choose a backup</label><select id="recovery" bind:value={recoveryIndex}><option value="">Choose…</option>{#each recoveryItems as item, i}<option value={String(i)}>{new Date(item.at).toLocaleString()} · {item.label}</option>{/each}</select><button class="secondary" disabled={recoveryIndex === ''} onclick={restore}>Restore backup</button></details>
+    </div>
+    <div class="library-footer"><span class="status-dot"></span><span>Local world · version 1</span></div>
+  </aside>
+
   <section class="workspace" aria-label="Planetary atlas">
-    <div class="world-heading"><div><p class="eyebrow">CHART 01 / SPHERICAL REFERENCE</p><h1>{planet.name}<span>Give every story a world.</span></h1></div>
-      <div class="mode-switch" aria-label="View mode"><button class:active={mode === 'atlas'} aria-pressed={mode === 'atlas'} onclick={() => switchMode('atlas')}>2D Atlas</button><button class:active={mode === 'globe'} aria-pressed={mode === 'globe'} onclick={() => switchMode('globe')}>3D Globe</button></div>
+    <div class="world-heading"><div><p class="eyebrow">PLANETARY ATLAS</p><h1>{planet.name}</h1></div>
+      <div class="mode-switch" aria-label="View mode">
+        <button class:active={mode === 'atlas'} aria-pressed={mode === 'atlas'} onclick={() => switchMode('atlas')}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m2 4 5-2 6 2 5-2v14l-5 2-6-2-5 2Zm5-2v14m6-12v14" /></svg>2D Atlas</button>
+        <button class:active={mode === 'globe'} aria-pressed={mode === 'globe'} onclick={() => switchMode('globe')}><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8"/><ellipse cx="10" cy="10" rx="3.5" ry="8"/><path d="M2 10h16"/></svg>3D Globe</button>
+      </div>
     </div>
     {#if graphicsError}<div class="graphics-notice" role="status">{graphicsError}</div>{/if}
-    <div class="map-toolbar">
-      <div class="view-caption"><span class="status-dot"></span>{mode === 'atlas' ? 'EQUIRECTANGULAR' : 'SPHERICAL'} <span> / RELIEF ATLAS</span></div>
-      {#if mode === 'atlas'}<div class="map-options"><label><input type="checkbox" bind:checked={showGrid} />Grid</label><label><input type="checkbox" bind:checked={showLabels} />Region labels</label></div>{:else}<span class="toolbar-hint">Drag to explore your world</span>{/if}
+    {#if storageError}<div class="graphics-notice" role="alert">{storageError}</div>{/if}
+    <div class="chart">
+      <div class="map-toolbar">
+        <span class="view-caption">{mode === 'atlas' ? 'Equirectangular projection' : 'Spherical view'}</span>
+        <div class="map-options">{#if mode === 'atlas'}<label><input type="checkbox" bind:checked={showGrid} />Grid</label><label><input type="checkbox" bind:checked={showLabels} />Region labels</label>{/if}<label><input type="checkbox" bind:checked={showWater} />Water</label><label><input type="checkbox" bind:checked={bathymetry} />Bathymetry</label></div>
+      </div>
+      <div class="viewport" class:globe-mode={mode === 'globe'}>
+        {#if texture}
+          {#if mode === 'atlas'}<Atlas {texture} {selection} {landmarks} {showGrid} {showLabels} onselect={select} onhover={(point) => hover = point} />
+          {:else}<Globe {texture} {selection} {landmarks} onselect={select} onhover={(point) => hover = point} onerror={globeError} />{/if}
+        {:else}<p class="loading" role="status">Preparing sample terrain…</p>{/if}
+      </div>
+      <div class="chart-bottom">
+        <p class="view-instruction">{mode === 'atlas' ? 'Click to inspect · Drag to pan · + / − to zoom · Arrow keys move selection' : 'Drag to rotate · Scroll to zoom · Click to inspect'}</p>
+        <div class="legend" aria-label={bathymetry && showWater ? 'Water depth legend' : showWater ? 'Sea-relative relief legend' : 'Exposed terrain legend'}><span>{!showWater ? 'Low terrain' : bathymetry ? '9,000+ m depth' : '−9,000 m from sea'}</span><div class="legend-ramp" class:bathymetry={bathymetry && showWater} class:exposed={!showWater}></div><span>{!showWater ? 'High terrain' : bathymetry ? '0 m · shore' : '+6,000 m from sea'}</span></div>
+      </div>
     </div>
-    <div class="viewport" class:globe-mode={mode === 'globe'}>
-      {#if texture}
-        {#if mode === 'atlas'}<Atlas {texture} {selection} {landmarks} {showGrid} {showLabels} onselect={select} onhover={(point) => hover = point} />
-        {:else}<Globe {texture} {selection} {landmarks} onselect={select} onhover={(point) => hover = point} onerror={globeError} />{/if}
-      {:else}<p class="loading" role="status">Preparing sample terrain…</p>{/if}
-    </div>
-    <div class="atlas-footer"><span class="pointer-readout">{hover ? degrees(hover) : 'Move over the world to read coordinates'}</span><span>R { (planet.radius_m / 1000).toLocaleString('en-US') } km</span></div>
-    <p class="view-instruction">{mode === 'atlas' ? 'Click to inspect · Arrow keys to move selection' : 'Drag to rotate · Scroll to zoom · Click to inspect'}</p>
-    <div class="legend" aria-label="Elevation legend"><span>Seafloor</span><span>−9,000 m</span><div class="legend-ramp"></div><span>+6,000 m</span><span>Highland</span></div>
-    <div class="sample-intro"><div><p class="eyebrow">FIELD GUIDE</p><p>Places worth exploring</p></div><span>Original seeded terrain · illustrative geology</span></div>
-    <div class="sample-sites">{#each SAMPLE_SITES as site, index}<button onclick={() => select(site)}><span class="site-index" aria-hidden="true">0{index + 1}</span><span class="site-name">{site.name}</span><small>{site.description}</small><span class="site-elevation">{elevation(sampleElevation(raster, site))} ↗</span></button>{/each}</div>
+    <div class="atlas-footer"><span class="pointer-readout">{hover ? degrees(hover) : 'Move over the map to read coordinates'}</span><span>Radius { (planet.radius_m / 1000).toLocaleString('en-US') } km</span></div>
   </section>
 
   <aside class="inspector" aria-label="Position inspector">
-    <div class="inspector-title"><p class="eyebrow">FIELD RECORD / 001</p><h2>{selectedLandmark?.name ?? selectedSite?.name ?? 'Selected position'}</h2><span class="record-classification">{selection && selection.altitude_m < 0 ? 'OCEAN FLOOR TOPOGRAPHY' : 'CONTINENTAL TOPOGRAPHY'}</span></div>
+    <div class="panel-heading"><h2>Inspector</h2><span class="inspector-symbol" aria-hidden="true">⌖</span></div>
+    <div class="inspector-title"><p class="eyebrow">{selectedLandmark ? 'YOUR LANDMARK' : selectedSite ? 'SAMPLE LOCATION' : 'MAP POSITION'}</p><h2>{selectedLandmark?.name ?? selectedSite?.name ?? 'Selected position'}</h2><span class="record-classification">{groundElevation < planet.sea_level_m ? 'Ocean floor' : 'Land surface'}{selectedLandmark?.locked ? ' · Locked' : ''}</span></div>
     {#if selection}
-      <div class="elevation-metric"><p class="eyebrow">ELEVATION / DATUM</p><p>{elevation(selection.altitude_m)}</p></div>
-      <p class="selection-coordinates" data-testid="selection-coordinates">{degrees(selection)}</p>
-      <dl class="position-details"><div><dt>Latitude</dt><dd data-testid="latitude">{selection.lat_deg.toFixed(4)}°</dd></div><div><dt>Longitude</dt><dd data-testid="longitude">{selection.lon_deg.toFixed(4)}°</dd></div><div><dt>Elevation</dt><dd data-testid="elevation">{elevation(selection.altitude_m)}</dd></div><div><dt>Environment</dt><dd>{selection.altitude_m < planet.sea_level_m ? 'Seafloor' : 'Land'}</dd></div></dl>
+      <div class="elevation-metric"><p class="section-label">{selectedLandmark ? 'Authored elevation' : groundElevation < planet.sea_level_m ? 'Seabed elevation' : 'Elevation'}</p><p data-testid="elevation">{elevation(selection.altitude_m)}</p><small>Relative to the fixed zero datum</small></div>
+      <dl class="water-details">{#if selectedLandmark}<div><dt>Terrain elevation</dt><dd data-testid="terrain-elevation">{elevation(groundElevation)}</dd></div>{/if}<div><dt>Sea level</dt><dd>{elevation(planet.sea_level_m)}</dd></div><div><dt>Water depth</dt><dd data-testid="water-depth">{waterDepth(groundElevation, planet.sea_level_m).toLocaleString('en-US')} m</dd></div></dl>
+      <dl class="position-details"><div><dt>Latitude</dt><dd data-testid="latitude">{selection.lat_deg.toFixed(4)}°</dd></div><div><dt>Longitude</dt><dd data-testid="longitude">{selection.lon_deg.toFixed(4)}°</dd></div></dl>
       <p class="observation-note">{selectedSite?.description ?? 'A geographic anchor for a place in your story.'}</p>
       <form class="landmark-form" onsubmit={(event) => { event.preventDefault(); saveLandmark(); }}>
-        <label for="landmark-name">LANDMARK NAME</label><input id="landmark-name" bind:value={name} maxlength="80" placeholder="Give this place a name" required />
-        <button class="primary" type="submit">{selectedLandmark ? 'Update landmark' : 'Set landmark'}</button>
+        <label for="landmark-name">Landmark name</label><input id="landmark-name" value={name} oninput={(e) => editDraft(e.currentTarget.value, authoredElevation)} disabled={!ready || selectedLandmark?.locked} maxlength="80" placeholder="Name this place…" required />
+        <label class="elevation-label" for="authored-elevation">Authored elevation (m)</label><input id="authored-elevation" type="number" value={authoredElevation} oninput={(e) => { if (e.currentTarget.value !== '') editDraft(name, e.currentTarget.valueAsNumber); }} disabled={!ready || selectedLandmark?.locked} min="-20000" max="20000" step="any" required />
+        <button class="primary" disabled={!ready || selectedLandmark?.locked} type="submit">{selectedLandmark ? 'Update landmark' : 'Set landmark'}<span aria-hidden="true">{selectedLandmark ? '✓' : '+'}</span></button>
       </form>
-    {:else}<div class="empty-selection"><span>⌖</span><p>Select a place on the map</p><small>Inspect its coordinates and elevation, then give it a name.</small></div>{/if}
+      {#if draft}<p class="draft-notice" role="status">Draft retained at this position. <button onclick={discardDraft}>Discard draft</button></p>{/if}
+      {#if selectedLandmark}<div class="action-row landmark-actions"><button onclick={lockLandmark}>{selectedLandmark.locked ? 'Unlock landmark' : 'Lock landmark'}</button><button class="delete-action" disabled={selectedLandmark.locked} onclick={deleteLandmark}>Delete landmark</button></div>{/if}
+    {:else}<div class="empty-selection"><p>Select a place on the map</p><small>Inspect its coordinates and elevation, then give it a name.</small></div>{/if}
     {#if error}<p class="error" role="alert">{error}</p>{/if}
     {#if notice}<p class="notice" role="status">{notice}</p>{/if}
-    <form class="coordinate-form" onsubmit={(event) => { event.preventDefault(); goTo(); }}><p class="eyebrow">GO TO COORDINATES</p><div class="coordinate-inputs"><label>Latitude<input type="number" bind:value={latitude} min="-90" max="90" step="any" required /></label><label>Longitude<input type="number" bind:value={longitude} step="any" required /></label></div><button type="submit" class="secondary">Inspect position</button></form>
-    <div class="landmark-list"><div class="list-heading"><p class="eyebrow">SESSION LANDMARKS</p><span>{landmarks.length.toString().padStart(2, '0')}</span></div>{#each landmarks as landmark (landmark.id)}<button class:chosen={landmark.id === selectedLandmark?.id} onclick={() => select(landmark.position)}><span>{landmark.name}</span><small>{degrees(landmark.position)}</small></button>{:else}<p class="muted">Your named places will appear here.</p>{/each}</div>
-    <p class="session-note">Landmarks live in this session only. Refresh clears edits. Save, export and author locks arrive in M1.</p>
-    <details class="prototype-details"><summary>About this prototype</summary><p>One {raster.width} × {raster.height} elevation raster powers both views. Terrain is fictional, not a scientific simulation. Elevation is in meters relative to sea level; it is not cave depth.</p><p>Generation: {generationMs.toFixed(1)} ms · raster: {(raster.samples.byteLength / 1024).toFixed(0)} KiB · {planet.algorithm_version}</p></details>
+    <details class="coordinate-disclosure"><summary>Go to coordinates</summary>
+      <form class="coordinate-form" onsubmit={(event) => { event.preventDefault(); goTo(); }}><div class="coordinate-inputs"><label>Latitude<input type="number" bind:value={latitude} min="-90" max="90" step="any" required /></label><label>Longitude<input type="number" bind:value={longitude} step="any" required /></label></div><button type="submit" class="secondary">Inspect position</button></form>
+      {#if selectedLandmark}<button class="secondary" disabled={selectedLandmark.locked} onclick={moveLandmark}>Move landmark to coordinates</button><p class="help-text">Moving keeps its authored elevation. Locked landmarks must be unlocked first.</p>{/if}
+    </details>
+    <details class="inspector-tool"><summary>Measure distance</summary><p class="help-text">Shortest great-circle distance using the world radius.</p><button class="secondary" onclick={() => measureStart = { ...project.selection }}>Set start at selection</button>{#if measureStart}<p class="help-text">From {degrees(measureStart)}</p><output class="distance-reading" data-testid="distance">{distanceKm(measureStart, selection, planet.radius_m).toLocaleString('en-US', { maximumFractionDigits: 2 })} km</output><button class="secondary" onclick={() => measureStart = null}>Clear measurement</button>{/if}</details>
+    <details class="inspector-tool"><summary>World settings</summary><form onsubmit={(e) => { e.preventDefault(); applySettings(); }}><label>Planet radius (km)<input type="number" bind:value={radiusKm} min="1" max="1000000" step="any" required /></label><label>Sea level (m)<input type="number" bind:value={seaLevel} min="-20000" max="20000" step="any" required /></label><label>Terrain seed<input bind:value={seed} maxlength="100" required /></label><button class="secondary" disabled={!ready} type="submit">Apply world settings</button></form><p class="help-text">Changing the seed regenerates sample terrain. Authored coordinates and elevations stay fixed. Sea level changes wet areas and water depth.</p></details>
+    <div class="inspector-foot">
+      <p class="session-note"><span aria-hidden="true">◷</span>{storageError ? 'Local save needs attention. Export before closing.' : 'Autosave in this browser. Export a backup to keep a portable copy.'}</p>
+      <details class="prototype-details"><summary>About this sample</summary><p>Fictional terrain for exploring Orbis, not a scientific simulation. Authored landmarks are independent of regenerated terrain.</p><p>One {raster.width} × {raster.height} elevation raster powers both views. Water depth is sea level minus submerged elevation; it is not cave depth. Authored elevation changes the anchor, not the terrain raster.</p><p>Generation: {generationMs.toFixed(1)} ms · raster: {(raster.samples.byteLength / 1024).toFixed(0)} KiB · {planet.algorithm_version}</p></details>
+    </div>
   </aside>
 </main>
-<footer class="app-footer"><span>ORBIS / A WORLD FOR YOUR WORDS</span><span>Local prototype · No account or external service</span></footer>

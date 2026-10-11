@@ -1,14 +1,16 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { Coordinate, Landmark } from '../core/world';
-import { fromVector, toVector } from '../geo/coordinates';
+import { coordinate, fromVector, toVector } from '../geo/coordinates';
 
 export function createGlobe(host: HTMLElement, textureCanvas: HTMLCanvasElement,
   onselect: (point: Coordinate) => void, onhover: (point: Coordinate | null) => void,
   onerror: (message: string) => void) {
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.domElement.setAttribute('aria-label', '3D globe. Drag to rotate, scroll to zoom, click to select.');
+  renderer.domElement.setAttribute('aria-label', '3D globe. Drag to rotate, scroll or plus and minus to zoom, click or arrow keys to select.');
+  renderer.domElement.setAttribute('role', 'application');
+  renderer.domElement.tabIndex = 0;
   host.appendChild(renderer.domElement);
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
@@ -55,6 +57,7 @@ export function createGlobe(host: HTMLElement, textureCanvas: HTMLCanvasElement,
   const pointer = new THREE.Vector2();
   let frame = 0;
   let disposed = false;
+  let currentSelection: Coordinate | null = null;
 
   function draw() {
     if (disposed || frame) return;
@@ -107,6 +110,18 @@ export function createGlobe(host: HTMLElement, textureCanvas: HTMLCanvasElement,
     onerror('The graphics context was lost. The 2D atlas is still available.');
   };
   const canvas = renderer.domElement;
+  const keydown = (event: KeyboardEvent) => {
+    const step = event.shiftKey ? 10 : 1;
+    const offsets: Record<string, [number, number]> = { ArrowUp: [step, 0], ArrowDown: [-step, 0], ArrowLeft: [0, -step], ArrowRight: [0, step] };
+    if (offsets[event.key]) {
+      event.preventDefault(); const [lat, lon] = offsets[event.key]; const point = currentSelection ?? coordinate(0, 0);
+      onselect(coordinate(Math.max(-90, Math.min(90, point.lat_deg + lat)), point.lon_deg + lon));
+    } else if (['+', '=', '-'].includes(event.key)) {
+      event.preventDefault(); const distance = Math.max(controls.minDistance, Math.min(controls.maxDistance, camera.position.length() * (event.key === '-' ? 1.2 : 1 / 1.2)));
+      camera.position.setLength(distance); controls.update(); draw();
+    }
+  };
+  canvas.addEventListener('keydown', keydown);
   canvas.addEventListener('pointerdown', pointerdown);
   canvas.addEventListener('pointerup', pointerup);
   canvas.addEventListener('pointermove', pointermove);
@@ -115,7 +130,9 @@ export function createGlobe(host: HTMLElement, textureCanvas: HTMLCanvasElement,
   canvas.addEventListener('webglcontextlost', contextlost);
 
   return {
+    setTexture(canvas: HTMLCanvasElement) { texture.image = canvas; texture.needsUpdate = true; draw(); },
     update(selection: Coordinate | null, landmarks: Landmark[]) {
+      currentSelection = selection;
       markers.clear();
       for (const landmark of landmarks) {
         const marker = new THREE.Mesh(markerGeometry, markerMaterial);
@@ -136,6 +153,7 @@ export function createGlobe(host: HTMLElement, textureCanvas: HTMLCanvasElement,
       cancelAnimationFrame(frame);
       observer.disconnect();
       controls.dispose();
+      canvas.removeEventListener('keydown', keydown);
       canvas.removeEventListener('pointerdown', pointerdown);
       canvas.removeEventListener('pointerup', pointerup);
       canvas.removeEventListener('pointermove', pointermove);

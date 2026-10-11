@@ -12,6 +12,7 @@ export interface Landmark {
   name: string;
   position: Position;
   source: 'authored';
+  locked?: boolean;
 }
 
 export interface Planet {

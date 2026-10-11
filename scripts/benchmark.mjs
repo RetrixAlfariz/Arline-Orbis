@@ -8,8 +8,8 @@ try {
   await cdp.send('Performance.enable');
   await page.goto(process.env.ORBIS_BENCH_URL ?? 'http://127.0.0.1:4173');
   await page.getByRole('application').waitFor();
-  await page.locator('details').evaluate((element) => { element.open = true; });
-  const detail = await page.locator('details').innerText();
+  await page.locator('.prototype-details').evaluate((element) => { element.open = true; });
+  const detail = await page.locator('.prototype-details').innerText();
   const heap = async () => {
     const { metrics } = await cdp.send('Performance.getMetrics');
     return Math.round(metrics.find((metric) => metric.name === 'JSHeapUsedSize').value / 1024 / 1024 * 100) / 100;

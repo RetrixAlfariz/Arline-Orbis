@@ -18,7 +18,7 @@ export function elevationColor(elevation: number): [number, number, number] {
   return stops[stops.length - 1][1];
 }
 
-export function terrainTexture(raster: ElevationRaster): HTMLCanvasElement {
+export function terrainTexture(raster: ElevationRaster, options = { seaLevel: 0, showWater: true, bathymetry: false }): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = raster.width;
   canvas.height = raster.height;
@@ -27,7 +27,11 @@ export function terrainTexture(raster: ElevationRaster): HTMLCanvasElement {
   const image = context.createImageData(raster.width, raster.height);
   for (let i = 0; i < raster.samples.length; i++) {
     const height = raster.samples[i];
-    const [r, g, b] = elevationColor(height);
+    const wet = height < options.seaLevel;
+    const relative = options.bathymetry && wet ? height - options.seaLevel : height;
+    const [r, g, b] = !options.showWater && wet ? elevationColor(Math.max(0, height + 9000) / 3)
+      : wet ? elevationColor(Math.min(-1, relative - (options.bathymetry ? 0 : options.seaLevel)))
+      : options.bathymetry && options.showWater ? [139, 153, 126] : elevationColor(Math.max(0, height - options.seaLevel));
     const column = i % raster.width;
     const row = Math.floor(i / raster.width);
     const left = raster.samples[i - column + (column + raster.width - 1) % raster.width];
@@ -42,7 +46,11 @@ export function terrainTexture(raster: ElevationRaster): HTMLCanvasElement {
 
   // Original marching-squares isolines, sampled from the same raster as the inspector.
   // The last column wraps to the first; the texture edge remains geographic, not a border.
-  for (const level of [-6000, -4000, -2000, -1000, 0, 1000, 2000, 4000]) {
+  const coast = options.seaLevel;
+  const levels = [...new Set(options.bathymetry && options.showWater
+    ? [coast - 6000, coast - 4000, coast - 2000, coast - 1000, coast]
+    : [-6000, -4000, -2000, -1000, coast, 1000, 2000, 4000])];
+  for (const level of levels) {
     context.beginPath();
     for (let y = 0; y < raster.height - 1; y++) {
       for (let x = 0; x < raster.width; x++) {
@@ -69,10 +77,10 @@ export function terrainTexture(raster: ElevationRaster): HTMLCanvasElement {
         }
       }
     }
-    context.strokeStyle = level === 0 ? 'rgba(235, 225, 181, 0.65)' : level < 0 ? 'rgba(165, 205, 210, 0.18)' : 'rgba(77, 75, 46, 0.17)';
-    context.lineWidth = level === 0 ? 2 : 0.5;
+    context.strokeStyle = level === coast ? 'rgba(235, 225, 181, 0.65)' : level < coast && options.showWater ? 'rgba(165, 205, 210, 0.18)' : 'rgba(77, 75, 46, 0.17)';
+    context.lineWidth = level === coast ? 2 : 0.5;
     context.stroke();
-    if (level === 0) {
+    if (level === coast) {
       context.strokeStyle = '#576d64';
       context.lineWidth = 0.65;
       context.stroke();

@@ -1,10 +1,10 @@
 # Roadmap and engineering acceptance
 
-**Status:** M0 implemented and locally verified on 2026-10-11; M1 onward remains planned. This roadmap is a sequence of achievable increments, not a promise of dates. See [M0 evidence and limitations](M0.md).
+**Status:** M0 and M1 implemented and locally verified through 2026-10-12; M2 onward remains planned. This roadmap is a sequence of achievable increments, not a promise of dates. See [M1 evidence and limitations](M1.md) and the original [M0 report](M0.md).
 
 ## M0 — Foundation and clickable prototype [P0]
 
-**Implemented.** Local development and production browser checks pass. Landmarks are session-only until M1; this milestone does not claim save/load or scientific terrain generation.
+**Implemented.** Local development and production browser checks pass. The original M0 used session landmarks; M1 now persists them. Scientific terrain generation remains outside this milestone.
 
 **Goal:** get a working editor rather than a huge framework of placeholders.
 
@@ -22,6 +22,8 @@ Accept when:
 - Documentation distinguishes prototype terrain from scientific simulation.
 
 ## M1 — Geometry, sea depth, safety and portability [P0]
+
+**Implemented locally.** Save/reopen, portable round-trip, locks, bounded recovery, radius/distance tools, sea-level/depth semantics and shared bathymetry views are available. See [M1](M1.md) for tests, measured performance and validation limits.
 
 Deliver:
 - Radius/scale editing, kilometer geodesic distance tool, correct dateline/pole handling.
