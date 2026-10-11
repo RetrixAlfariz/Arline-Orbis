@@ -58,12 +58,12 @@ Deliver:
 - Sparse chamber/entrance/tunnel/shaft graph and local depth slices.
 - Simple underground cross-section, local passages, underwater entrances.
 - Map links to story entities and branch/time variants.
-- Versioned reviewed export proposal for a future Arline Studio adapter.
+- Standalone narrative place metadata and optional Orbis-local historical/variant scopes.
 
 Accept when:
 - A subsurface chamber can be placed at precise depth and located from its entrance.
 - Ocean/seabed vs cave altitude are disambiguated in data and UI.
-- World/branch/entity references remain stable and nothing silently writes to Arline Studio.
+- Orbis world, place and optional variant IDs remain stable; the app functions without external services.
 
 ## M4 — Procedural planetary systems [P2]
 
@@ -80,25 +80,33 @@ Accept when:
 - Procedural results are editable and never override confirmed author canon.
 - The system remains usable on a modest computer in low-detail mode.
 
-## M5 — Packaging and Arline integration [P2]
+## M5 — Standalone hardening, optimization and distribution [P2]
 
 Deliver:
-- Optional desktop packaging (Tauri if justified).
-- Explicit, reviewed integration with a compatible future Arline Studio release.
-- Backup/restore and conflict migration tests.
-- Accessibility, benchmark reports, refined UI, release documentation.
+- Real-world GPU/CPU/memory benchmarks, progressive tile loading, sensible low-detail mode and graceful degradation.
+- Optional standalone desktop packaging (Tauri if justified).
+- Import/export compatibility, versioned migrations, crash/recovery checks and project backup/restore.
+- Accessibility, keyboard navigation, refined UX, sample atlases, release documentation.
+- Regression coverage for projection seams, bathymetry, locked edits and existing project compatibility.
 
 Accept when:
-- Orbis can run standalone.
-- The user sees and approves any proposed change to Arline's Library.
-- The integration leaves legacy v1.1 data intact.
+- Orbis is a useful standalone worldbuilding application with no other installed services.
+- Large worlds remain interactive through progressive rendering, not universal maximum-resolution allocation.
+- Existing projects upgrade safely, are recoverable and can be exported without data loss.
+- Release documentation, automated tests and reproducible performance baselines exist.
+
+## Unscheduled future possibility — Arline Studio interoperability [deferred, outside M0–M5]
+
+**Do not implement this during the active roadmap.** Arline Studio integration is intentionally a distant possibility only. It can be reconsidered when Orbis has matured as a standalone application, users have stable project files, and both product APIs and data models are sufficiently settled. Research potential reviewed import/export *only after explicit reauthorization*.
+
+[Issue #7](https://github.com/RetrixAlfariz/Arline-Orbis/issues/7) is a parked idea, **not an active development requirement**. It has no target release date, required deliverables, or implied implementation commitment.
 
 ## Backlog prioritization rules
 
 1. **Never start advanced geology before M0/M1 is usable.**
 2. Save/restore and authored-canon protection precede regeneration complexity.
 3. Use profiling to justify WASM, Rust, tiling complexity or native packaging.
-4. A feature requested for lore continuity outranks photorealistic presentation.
+4. A feature requested for standalone lore continuity outranks photorealistic presentation.
 5. Break milestone work into small PRs, each with an executable demo and tests.
 
 Track actionable work in [issues](https://github.com/RetrixAlfariz/Arline-Orbis/issues); avoid treating this document as an automatically checked task list.

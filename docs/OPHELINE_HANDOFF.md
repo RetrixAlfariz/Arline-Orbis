@@ -6,7 +6,7 @@
 
 ## Objective
 
-Implement **Arline Orbis**, a **lightweight local-first 2D/3D planetary atlas for storytelling**. Orbis maps physical positions and environments; Arline Studio retains authority for world, branch and entity canon.
+Implement **Arline Orbis**, a **lightweight local-first 2D/3D planetary atlas for storytelling**, as a complete **standalone application**. All its worlds, authored geographic places and local lore must work independently. An Arline Studio adapter is **not** part of the development assignment.
 
 Read, in order:
 1. [README](../README.md) — mission and status.
@@ -52,12 +52,15 @@ Follow with:
 - Do not copy GPL/AGPL reference code into Orbis without an explicit licensing decision.
 - Do not invent a license for this repository without owner decision.
 
-### Arline Studio compatibility
-[Arline Studio](https://github.com/RetrixAlfariz/Arline-Studio) v1.1 is **feature-frozen**. Its Python/FastAPI + SQLite implementation uses stable IDs and branch-aware Library identity.
-- Do not edit or migrate the v1.1 workspace schema as part of Orbis.
-- Do not write directly to Arline's SQLite.
-- Treat a link from Orbis to an Arline Location as a **reviewed mapping**, not a canon mutation.
-- Confirm future API/schema at implementation time; propose integration for a compatible later Studio milestone.
+### Independence from Arline Studio (mandatory)
+
+Arline Studio has its own evolving architecture and v1.1 feature freeze. The integration idea is **indefinitely deferred** from Orbis's active milestones:
+- Do **not** implement an Arline API adapter, importer/sync, integration UI, or Studio-specific foreign keys.
+- Do **not** alter or access Arline's live database.
+- Do **not** require Arline Studio to launch, save, export, or author an Orbis world.
+- Keep Orbis project data versioned, stable and portable for its own users.
+- Ignore the parked [future interoperability issue #7](https://github.com/RetrixAlfariz/Arline-Orbis/issues/7) unless the project owner explicitly reactivates it after standalone Orbis is mature.
+- M5 is **standalone packaging and polish**, not integration.
 
 ## Quality / proof of work expected
 
@@ -82,7 +85,7 @@ Use original or properly licensed visuals. Polish belongs to the implementation 
 - IndexedDB autosave and portable binary asset packing.
 - Degree of geographic accuracy versus deliberate fantasy overrides.
 - Seam/cube-sphere LOD approach after measuring initial global texture limits.
-- Exact future Arline API adapter.
+- Standalone export/import contract and backwards-compatible project migration; integration with third-party tools is outside scope.
 - Orbis license.
 
 Escalate material scope/data-safety deviations in a GitHub issue or PR. Preserve the central principle: **the author controls what is canon**.

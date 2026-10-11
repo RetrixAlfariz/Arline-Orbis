@@ -2,7 +2,7 @@
 
 > **Give every story a world.**
 
-**Arline Orbis** is a planned, local-first, lightweight planetary atlas and spatial worldbuilding companion for [Arline Studio](https://github.com/RetrixAlfariz/Arline-Studio). Its purpose is **story continuity and authoring**, not game-world simulation for its own sake.
+**Arline Orbis** is a planned, local-first, lightweight planetary atlas for storytellers. It shares the broader Arline identity, but is being designed and built as a **fully standalone application**. Direct [Arline Studio](https://github.com/RetrixAlfariz/Arline-Studio) integration is a **distant, unscheduled possibility**, not part of the current delivery plan. Its purpose is **story continuity and authoring**, not game-world simulation for its own sake.
 
 **Status: specification / architecture baseline. No functioning editor or generator has been implemented in this repository yet.** The initial build and subsequent polish are delegated to **Opheline**. The documents here are the implementation brief, not claims of completed features.
 
@@ -10,7 +10,7 @@
 
 A fantasy world is more than coastlines and country borders. It has real distances, projections, land and seafloor relief, oceans and inland water bodies, underground passages, places and histories. Orbis connects those physical locations to authored story canon.
 
-**Orbis answers _where_ something happens. Arline Studio remains the authority on _what_ is true and what happens.**
+**Orbis answers _where_ something happens and lets its author control geographic truth, independently of any other application.**
 
 ## Product principles
 
@@ -21,7 +21,7 @@ A fantasy world is more than coastlines and country borders. It has real distanc
 5. **Detail on demand:** global structure stays lightweight; generate and load detailed regions only when requested.
 6. **Authored canon wins:** generated geography never silently overwrites locked landmarks, lore, or historical facts.
 7. **Local-first and portable:** projects can be saved, backed up, and exchanged without an online account.
-8. **Isolated integration:** Orbis starts independently. Do **not** mutate Arline Studio v1.1 tables, migrations, or canon through an undocumented shortcut.
+8. **Standalone first:** No Arline Studio APIs, adapters, or database integration in current milestones. Future interoperability must be separately scoped and approved; never mutate external canon silently.
 
 ## Scope at a glance
 
@@ -33,7 +33,7 @@ A fantasy world is more than coastlines and country borders. It has real distanc
 | Oceans | Full seafloor elevation, shelves, ridges, trenches, bathymetric styling | Seabed generation, hydrology, water-column ecology |
 | Underground | Documented depth model and stable place links | Cave networks, cross-sections, localized 3D caverns |
 | Worldbuilding | Locations, labels, notes, editable/locked features | History and world-branch visualization |
-| Arline | Export/import design and stable ID references | Reviewed API adapter to Studio worlds and branches |
+| External interoperability | Portable Orbis projects and stable location IDs | Possible Arline Studio integration only after Orbis matures; unscheduled |
 
 ## Intended stack (provisional)
 
@@ -42,7 +42,7 @@ A fantasy world is more than coastlines and country borders. It has real distanc
 - **Web Workers** for heavy or cancellable generation.
 - **IndexedDB + explicit project export/import** for the initial local-first workflow.
 - **Rust/WASM and Tauri 2** only when profiling or native desktop packaging justifies them.
-- Arline Studio currently uses **Python/FastAPI + SQLite**; future integration should use an explicit, versioned contract rather than shared-table writes.
+- **No Arline Studio dependency** during current development. Keep project serialization portable and identifiers stable, without building an integration adapter.
 
 See [Architecture](docs/ARCHITECTURE.md) for boundaries and engineering decisions.
 
@@ -61,9 +61,11 @@ Build a **working, offline-capable atlas prototype**: open a sample planet, swit
 
 This is an acceptance target, **not functionality available today**. See the [roadmap](docs/ROADMAP.md) and [GitHub Issues](https://github.com/RetrixAlfariz/Arline-Orbis/issues) for the implementation work.
 
-## Relationship to Arline Studio
+## Relationship to Arline Studio (long-term only)
 
-[Arline Studio v1.1](https://github.com/RetrixAlfariz/Arline-Studio) treats the Library as shared world truth, separates Projects and Manuscripts, and uses stable world/branch/entity identities. Its v1.1 feature line is frozen for hardening. Orbis therefore owns the **spatial editor and its data** until an explicit, reviewed integration is ready. Arline remains the source of truth for canon and does not automatically accept generated map features.
+Orbis is being developed **entirely independently**. Arline Studio v1.1 is feature-frozen, and the two applications have different implementation needs. In the current Orbis roadmap there is **no integration milestone, shared database, API adapter, synchronization layer, or required Arline installation**.
+
+Keep Orbis's saved worlds, geographic coordinates and IDs portable. In the distant future, after the standalone atlas is mature, a separately approved project could explore reviewed import/export or a compatible adapter. The dormant [future interoperability issue](https://github.com/RetrixAlfariz/Arline-Orbis/issues/7) is **not part of Opheline's active work**.
 
 ## License and inspiration
 

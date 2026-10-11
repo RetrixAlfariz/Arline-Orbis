@@ -77,11 +77,14 @@ Authoring requirement: new features should support geographic anchoring (point, 
 3. Trace chamber/tunnel links, entrances and exits.
 4. Anchor a city or plot event at a consistent 3D position.
 
-### Workflow E: connect to Arline (post-MVP)
-1. Export selected location metadata with stable Orbis IDs.
-2. Propose links to existing Arline world, branch, and Library entity IDs.
-3. Preview diff; accept/reject mapping before it becomes authoritative canon.
-4. Keep Orbis map geometry separate from Arline's Library authority.
+### Workflow E: portable, standalone story work
+
+1. Save a complete project and export it to a portable format.
+2. Open it without any connection to Arline Studio or cloud infrastructure.
+3. Share or back up the project while preserving its geographic IDs, scale, authored metadata and edits.
+4. Optionally maintain local story notes, character/place associations and timeline variants inside Orbis itself.
+
+**Arline integration is specifically deferred and is not a deliverable of any current milestone.**
 
 ## 5. Priorities
 
@@ -95,10 +98,12 @@ Authoring requirement: new features should support geographic anchoring (point, 
 | P1 | Terrain and seabed painting with authored override precedence |
 | P1 | Richer map projections, regional tiled detail, cross-section inspection |
 | P1 | Underground network with explicit depth and surface entrance links |
-| P1 | Lore/branch adapters to Arline with review-before-canon |
+| P1 | Standalone lore/place metadata and explicit author-controlled variants; no external adapters |
 | P2 | Tectonic, climate and hydrology algorithms; water columns / deep-ocean biomes |
 | P2 | Historical map states, conditional/fantasy geography, specialized realms |
 | P2 | Optional Tauri desktop and selectively optimized Rust/WASM kernels |
+
+**Deferred / unscheduled (not P0–P2):** investigate optional Arline Studio interoperability *only after* Orbis is independently usable, stable, and portable. No compatibility implementation is authorized by this specification.
 
 P0 must be deliberately small. **Do not attempt full planetary geology or a voxel game before completing P0.**
 
@@ -108,7 +113,7 @@ P0 must be deliberately small. **Do not attempt full planetary geology or a voxe
 - Full Navier–Stokes oceans, global fluid simulation, planet-wide voxel storage.
 - High-resolution geometry for areas that are not visible.
 - Fully scientifically validated tectonics or meteorology in the first releases.
-- Implicit or autonomous editing of Arline's canonical Library.
+- Any Arline Studio adapter, synchronization feature, or direct database integration during current milestones, including implicit editing of Arline's Library.
 - Mandatory online account, always-on server, cloud database, or model inference.
 
 ## 7. Data and author safety

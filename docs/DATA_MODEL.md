@@ -26,7 +26,7 @@
 | Underground node | geodetic anchor, altitude/depth range, chamber info | Orbis |
 | Underground connection | node IDs, route, vertical extent, traversability | Orbis |
 | Historical/branch state | event or variant referencing stable features | Orbis until mapped |
-| Arline link | world_id, branch_id, entity_id, review status | External reference; Arline is authority |
+| Optional external reference (future) | namespaced opaque IDs, if explicitly imported | External mapping, never required for core Orbis data |
 
 ## Illustrative JSON manifest (not final file specification)
 
@@ -71,11 +71,7 @@
         "lon_deg": 106.8,
         "altitude_m": 12
       },
-      "links": {
-        "arline_world_id": null,
-        "arline_branch_id": null,
-        "arline_entity_id": null
-      }
+      "external_refs": []
     }
   ],
   "water_bodies": [],
@@ -94,7 +90,7 @@ Each editable record needs, at minimum:
 - Stable ID and creation/update revisions.
 - Source: **authored**, **generated**, or **imported**.
 - Locked status and, where relevant, generator seed/version.
-- Optional Arline link IDs and branch/timeline scope.
+- Optional Orbis-local branch/timeline scope. Do not require Arline-specific foreign IDs or adapters.
 - Conflict detection when regeneration moves terrain around a locked anchor.
 
 Regeneration must create a proposal or new generated layer, then merge following authored-lock rules. Rejected generated results must not modify canonical user edits. A change of radius or datum can invalidate coordinates/depths and must be explicitly reviewed.
@@ -112,15 +108,8 @@ Cave graph edges may be shafts, tunnels, natural conduits or explicitly fictiona
 
 ## Branch/history contract
 
-Arline Studio distinguishes world, branch, and entity identities. Store a link to the intended branch and variant, never assume a place name maps uniquely across worlds.
+Orbis's own worlds, local story variants and historical states must reference stable **Orbis feature IDs**. Historical maps should use non-destructive deltas or snapshots rather than duplicated worlds by default. Viewing a different time or branch must not silently rewrite original authored places. Do not assume a name identifies the same place across different Orbis worlds.
 
-Orbis historical states should be **non-destructive deltas or snapshots referencing stable feature IDs**, not whole duplicated worlds by default. Authored canonical facts are not altered by viewing a historical date or what-if branch.
+## External interoperability (unscheduled)
 
-## Stable API boundary (future)
-
-Integration proposals should separate:
-1. **Read** existing Arline IDs and basic location metadata from a supported API/export.
-2. **Suggest** Orbis spatial links or additions and display a reviewable diff.
-3. **Commit** only through a supported Arline API after explicit user approval.
-
-Until a formal adapter ships, all links are metadata and **no changes are written to Arline**.
+A portable, versioned Orbis project format is useful by itself. Orbis does **not** currently need knowledge of any Arline Studio world, branch, Library entity or API contract. If interoperability is considered in a distant future phase, propose an explicit optional namespaced link format and reviewed import/export contract **then**, using the current state of both applications. No integration work is in the scheduled roadmap.

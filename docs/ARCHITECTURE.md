@@ -20,27 +20,26 @@ Later, **if profiling justifies it**, optional Rust/WASM for hot algorithms and 
 ## 2. Boundaries
 
 ~~~text
-Arline Studio (separate app; Python/FastAPI + SQLite)
-        |  explicit reviewed import/export or future versioned adapter
-        v
-Orbis story link adapter (never silently writes canon)
-        |
-+-------+-----------------------+
+Orbis UI (standalone; runs without Arline Studio)
+      |
++-----+-------------------------+
 | Orbis domain / geographic core|
-| world manifest, IDs, features |
-| coordinates, authored locks   |
-+-------+---------+-------------+
-        |         |
-  projection    terrain/water/subsurface domain
-        |         |
-  2D Atlas      generation workers, tile cache
-        \         /
-         3D globe renderer
-               |
-       local project store
+| stable IDs, geography, places |
+| authored locks, local lore    |
++-----+-------------+-----------+
+      |             |
+ D3-geo projection  Terrain/water/subsurface
+      |             |
+ 2D atlas           Generation workers + cache
+       \             /
+        Three.js globe
+              |
+      Local portable project storage
 ~~~
 
 **Domain is renderer-agnostic.** Neither screen pixels nor Three.js vertices are authoritative geographic coordinates. UI selection and camera state must not become canon or persistent feature geometry.
+
+An Arline Studio interface **does not exist in the active architecture**. Do not scaffold a future integration package now; keep Orbis export formats clean and stable so a separately approved adapter remains possible years later.
 
 ## 3. Ground truth: coordinate system
 
@@ -50,7 +49,7 @@ For an initial spherical body:
 - Positive altitude/elevation means **above** reference sea-level datum.
 - Underground objects use the same altitude datum; derive depth below local ground from terrain elevation minus object altitude.
 - Oceans calculate water depth using the relevant connected water body's surface elevation minus floor elevation.
-- Store named locations by IDs and world/branch references, **not** by text name.
+- Store named locations by stable Orbis IDs and optional Orbis-local variant references, **not** by text name. Do not require external application IDs.
 - Distances calculated on the sphere (great-circle) independent of projection, with clear units.
 - Map projections are view transforms only. Handle dateline splitting/pole behavior and different coordinate orientation between raster formats and 3D textures in tests.
 
@@ -115,20 +114,16 @@ Initial persistence model:
 
 An initial small-world JSON-only export is acceptable to deliver the first working prototype, as long as its version and limitations are clearly labeled.
 
-## 8. Relationship to Arline Studio v1.1
+## 8. Deliberately deferred: Arline Studio interoperability
 
-Verified upstream architecture at planning time: Arline Studio v1.1 is Python/FastAPI with SQLite, and its Library/Workspace distinguishes worlds, branches, entity families/variants, location entities, projects, manuscript and Context Stack.
+Orbis is an **independent program** during every scheduled milestone, including standalone release hardening. Arline Studio currently has a Python/FastAPI + SQLite backend and branch-aware canon concepts, but that does **not** determine Orbis runtime architecture or force shared storage.
 
-Integration principles:
-- **Do not change Arline Studio v1.1** for Orbis features. v1.1 is in feature freeze.
-- Treat Arline Library as canon authority; Orbis owns geographic representation and provisional map features.
-- Store explicit optional links: Arline world ID, branch ID, location/entity ID.
-- Stage an export or API proposal; a human must approve canon changes.
-- No direct cross-process SQLite table writes or shared mutable live DB.
-- Plan future work for a suitable later Studio release (e.g., v1.2+) after verifying its current API and schema.
-- A project is a story workspace, not the owner of global Library entities. Maintain this upstream invariant.
-
-Integration adapters and schemas are proposed in [DATA_MODEL.md](DATA_MODEL.md).
+Rules for current development:
+- Do **not** add Arline Studio APIs, adapters, database schemas, migrations or syncing tasks.
+- Do **not** edit or write to Arline Studio's SQLite database.
+- Do **not** make Arline installation, account access or a running Arline service a requirement.
+- Build stable Orbis IDs, provenance and versioned portable exports *for Orbis's own reliability*. Potential interoperability is a side benefit, not the reason for the design.
+- Future exploration must be separately authorized after Orbis has matured and the then-current Studio schema/API is re-evaluated. No release date or milestone is assigned.
 
 ## 9. Likely application organization
 
@@ -145,7 +140,6 @@ src/
   render/globe3d/      # three.js
   generation/          # deterministic workers (later)
   storage/             # IndexedDB, export/import/versioning
-  integrations/arline/ # explicit optional adapter (later)
 tests/
 docs/
 ~~~
@@ -161,14 +155,14 @@ This is a suggested directory map, not a requirement to create empty folders bef
 - Seed + configuration reproducibility; authored feature locks survive regeneration.
 - Save/reload fidelity for names, coordinates, IDs and locks.
 - Offline loading, disabled network, invalid project import and graceful WebGL fallback.
-- No Studio v1.1 schema write in Orbis.
+- No dependency on, or write to, any Arline Studio schema.
 
 ## 11. Open design decisions
 
 Decide with measured prototypes:
 - Flat world data raster vs spherical plate mesh representation for generation.
 - Compressed terrain tile/container format and high-resolution export.
-- Interop interface shape for Arline (API plugin, file exchange, import assistant).
+- Independent project interchange and archival format. Arline-specific interoperability is deferred outside the roadmap.
 - Concrete offline strategy and maximum cache sizes.
 - Multiple planets/realms in one project, portals between them, and historical branches.
 
