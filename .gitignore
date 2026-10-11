@@ -1,0 +1,16 @@
+# Installed dependencies and local build caches
+node_modules/
+.vite/
+*.tsbuildinfo
+
+# Production output
+dist/
+
+# Generated browser test evidence
+test-results/
+playwright-report/
+blob-report/
+
+# Local overrides and npm diagnostics
+*.local
+npm-debug.log*
