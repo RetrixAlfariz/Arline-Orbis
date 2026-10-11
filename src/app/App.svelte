@@ -93,7 +93,7 @@
   let selectedLandmark = $derived(landmarks.find((landmark) => selection &&
     landmark.position.lat_deg === selection.lat_deg && landmark.position.lon_deg === selection.lon_deg));
   let selectedSite = $derived(isSampleWorld ? SAMPLE_SITES.find((site) => selection &&
-    site.lat_deg === selection.lat_deg && site.lon_deg === selection.lon_deg)) : undefined);
+    site.lat_deg === selection.lat_deg && site.lon_deg === selection.lon_deg) : undefined);
   const name = $derived(draft?.name ?? selectedLandmark?.name ?? '');
 
   $effect(() => { if (ready) texture = terrainTexture(raster, { seaLevel: planet.sea_level_m, showWater, bathymetry, style: mapStyle }); });
