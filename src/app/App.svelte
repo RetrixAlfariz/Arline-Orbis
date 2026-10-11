@@ -16,11 +16,20 @@
 
   let project = $state<Project>(newProject());
   const planet = $derived(project.planet);
+  // Selection and landmark edits must never re-run global terrain synthesis.
+  // Cache by the *geographic* inputs only, not by a whole mutable Project reference.
+  let cachedTerrainKey = '';
+  let cachedTerrain: { raster: ReturnType<typeof generatePlanet>; ms: number } | undefined;
   const terrain = $derived.by(() => {
+    const key = planet.algorithm_version + '|' + planet.seed + '|' + planet.radius_m +
+      '|' + JSON.stringify(project.terrain_strokes ?? []);
+    if (key === cachedTerrainKey && cachedTerrain) return cachedTerrain;
     const start = performance.now();
     const base = generatePlanet(planet.seed, planet.algorithm_version);
     const raster = applyTerrainStrokes(base, project.terrain_strokes ?? [], planet.radius_m);
-    return { raster, ms: performance.now() - start };
+    cachedTerrain = { raster, ms: performance.now() - start };
+    cachedTerrainKey = key;
+    return cachedTerrain;
   });
   const isSampleWorld = $derived(planet.algorithm_version === 'm0-sample-v1');
   const raster = $derived(terrain.raster);
@@ -83,8 +92,8 @@
   const visibleLandmarks = $derived(landmarks.filter((l) => l.name.toLowerCase().includes(search.toLowerCase())));
   let selectedLandmark = $derived(landmarks.find((landmark) => selection &&
     landmark.position.lat_deg === selection.lat_deg && landmark.position.lon_deg === selection.lon_deg));
-  let selectedSite = $derived(SAMPLE_SITES.find((site) => selection &&
-    site.lat_deg === selection.lat_deg && site.lon_deg === selection.lon_deg));
+  let selectedSite = $derived(isSampleWorld ? SAMPLE_SITES.find((site) => selection &&
+    site.lat_deg === selection.lat_deg && site.lon_deg === selection.lon_deg)) : undefined);
   const name = $derived(draft?.name ?? selectedLandmark?.name ?? '');
 
   $effect(() => { if (ready) texture = terrainTexture(raster, { seaLevel: planet.sea_level_m, showWater, bathymetry, style: mapStyle }); });
@@ -367,7 +376,7 @@
         <span class="view-caption">{mode === 'atlas' ? 'Equirectangular projection' : 'Spherical view'}</span>
         <div class="map-options">{#if mode === 'atlas'}<label><input type="checkbox" bind:checked={showGrid} />Grid</label><label><input type="checkbox" bind:checked={showLabels} />Region labels</label>{/if}<label><input type="checkbox" bind:checked={showWater} />Water</label><label><input type="checkbox" bind:checked={bathymetry} />Bathymetry</label>
           <label class="atlas-style-label">Style <select aria-label="Atlas map style" bind:value={mapStyle}><option value="natural">Natural atlas</option><option value="survey">Survey sheet</option></select></label>
-          {#if mode === 'atlas'}<button type="button" class="tool-toggle" class:active={sculptMode} aria-pressed={sculptMode} onclick={() => sculptMode = !sculptMode}>✦ {sculptMode ? 'Sculpt ON' : 'Sculpt terrain'}</button>{/if}
+          {#if mode === 'atlas'}<button type="button" class="tool-toggle" class:active={sculptMode} aria-label={sculptMode ? 'Sculpt ON' : 'Sculpt terrain'} aria-pressed={sculptMode} onclick={() => sculptMode = !sculptMode}><span aria-hidden="true">✦ </span>{sculptMode ? 'Sculpt ON' : 'Sculpt terrain'}</button>{/if}
         </div>
       </div>
       <div class="viewport" class:globe-mode={mode === 'globe'} class:sculpt-mode={sculptMode}>
