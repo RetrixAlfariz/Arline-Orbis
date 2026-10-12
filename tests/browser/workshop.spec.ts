@@ -2,21 +2,29 @@ import {test,expect,type Page} from '@playwright/test';
 import {readFile} from 'node:fs/promises';
 const open=async(page:Page)=>{await page.getByText('Tools',{exact:true}).click();await page.getByRole('button',{name:'Generation Workshop',exact:true}).click();};
 const preview=(page:Page)=>page.getByTestId('workshop-preview');
+const draftReady=async(page:Page)=>{
+  // M5 drafts sample a fixed 720×361 simulation; the 180×91 display size is not
+  // a five-second compute guarantee on a shared CI runner. Await worker completion
+  // as well as the result, so a previous candidate cannot satisfy this check.
+  await expect(page.getByRole('button',{name:'Cancel generation',exact:true})).toHaveCount(0,{timeout:30000});
+  await expect(preview(page)).toContainText('180 × 91',{timeout:30000});
+};
 
 test('drafts, recipes, stages, comparisons and minimization never change the committed world',async({page})=>{
   test.setTimeout(90000);await page.goto('/');
   const before=await page.getByTestId('elevation').innerText();
-  await open(page);await expect(preview(page)).toContainText('180 × 91');
+  await open(page);await draftReady(page);
   await expect(page.getByRole('button',{name:'Apply reviewed world',exact:true})).toBeDisabled();
   await page.getByLabel('World recipe',{exact:true}).selectOption('Archipelago');
   await expect(page.getByLabel('Workshop plate count')).toHaveValue('24');
   await page.getByLabel('Workshop plate count').fill('23');
   await expect(page.getByLabel('World recipe',{exact:true})).toHaveValue('Custom');
   await page.getByLabel('Workshop seed').fill('workshop-candidates');
-  await expect(preview(page)).toContainText('180 × 91');
+  await draftReady(page);
   await page.getByRole('button',{name:'Compare three seeds',exact:true}).click();
   await expect(page.locator('.seed-candidates img')).toHaveCount(3,{timeout:30000});
   await page.getByRole('button',{name:'Select candidate 2',exact:true}).click();
+  await draftReady(page);
   await expect(page.locator('.generation-stages button').filter({hasText:'Tectonics'})).toBeEnabled();
   await page.locator('.generation-stages button').filter({hasText:'Tectonics'}).click();
   await expect(page.locator('.generation-preview-banner')).toContainText('Tectonics');
