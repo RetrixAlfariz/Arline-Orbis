@@ -9,6 +9,7 @@
   import { distanceKm } from '../geo/coordinates';
   import { caveProposal } from './model';
   import CaveScene from './CaveScene.svelte';
+  import CaveGenerator from './CaveGenerator.svelte';
   let {project,selection,raster,era,onchange,onselect}:{project:Project;selection:Coordinate;raster:ElevationRaster;era:string|null;onchange:(p:Project,label:string)=>void;onselect:(p:Coordinate)=>void}=$props();
   const graph=$derived(project.caves??{nodes:[],edges:[]});
   let id=$state(''),name=$state(''),kind=$state<CaveNode['kind']>('chamber'),depth=$state(250),height=$state(40),radius=$state(80),description=$state('');
@@ -16,16 +17,19 @@
   let from=$state(''),to=$state(''),edgeKind=$state<CaveEdge['kind']>('tunnel'),routeStart=$state(''),routeEnd=$state('');
   let flooded=$state(false),floodLevel=$state(-1000);
   let err=$state(''),slice=$state(-1000),sliceEnabled=$state(false),show3d=$state(false),proposal=$state<CaveGraph|null>(null);
+  let generatedPreview=$state<CaveGraph|null>(null),previewNode=$state<CaveNode|null>(null);
+  const preview=$derived(generatedPreview??proposal);
+  const viewGraph=$derived({nodes:[...graph.nodes,...(preview?.nodes??[])],edges:[...graph.edges,...(preview?.edges??[])]});
   const node=$derived(graph.nodes.find(n=>n.id===id));
-  const nodes=$derived(graph.nodes.filter(n=>visibleInEra(n,era)));
+  const nodes=$derived(viewGraph.nodes.filter(n=>visibleInEra(n,era)));
   const nodeIds=$derived(new Set(nodes.map(n=>n.id)));
-  const edges=$derived(graph.edges.filter(e=>nodeIds.has(e.from)&&nodeIds.has(e.to)));
+  const edges=$derived(viewGraph.edges.filter(e=>nodeIds.has(e.from)&&nodeIds.has(e.to)));
   const route=$derived(graphRoute(graph,routeStart,routeEnd,project.planet.radius_m));
   const diagram=$derived.by(()=>{
     const origin=nodes[0]?.position??selection;
     const xs=nodes.map(n=>distanceKm(origin,n.position,project.planet.radius_m));
-    const high=Math.max(0,...nodes.map(n=>sampleElevation(raster,n.position)),...nodes.map(n=>n.position.altitude_m+n.height_m/2))+100;
-    const low=Math.min(0,...nodes.map(n=>n.position.altitude_m-n.height_m/2))-100;
+    const high=Math.max(...(nodes.length?nodes.map(n=>sampleElevation(raster,n.position)):[0]),...nodes.map(n=>n.position.altitude_m+n.height_m/2))+100;
+    const low=Math.min(...(nodes.length?nodes.map(n=>n.position.altitude_m-n.height_m/2):[0]))-100;
     const maxX=Math.max(.2,...xs);const y=(m:number)=>215-(m-low)/(high-low)*180;
     return {points:nodes.map((n,i)=>({n,x:35+xs[i]/maxX*630,y:y(n.position.altitude_m),ground:y(sampleElevation(raster,n.position)),r:Math.max(3,Math.min(16,n.height_m/(high-low)*180/2))})),high,low,maxX,seaY:y(project.planet.sea_level_m),sliceY:y(slice)};
   });
@@ -34,7 +38,7 @@
   const spanLon=$derived(Math.max(.02,...nodes.map(n=>Math.abs(lonDelta(n.position.lon_deg)))));
   const spanLat=$derived(Math.max(.02,...nodes.map(n=>Math.abs(n.position.lat_deg-origin.lat_deg))));
   function change(p:Project,label:string){try{onchange(decodeProject(p),label);err='';}catch(e){err=(e as Error).message;}}
-  function choose(n:CaveNode){id=n.id;name=n.name;kind=n.kind;height=n.height_m;radius=n.radius_m;description=n.description;latitude=n.position.lat_deg;longitude=n.position.lon_deg;altitude=n.position.altitude_m;nodeEra=n.era_id??'';flooded=n.water_level_m!==undefined;floodLevel=n.water_level_m??n.position.altitude_m;onselect(n.position);show3d=false;}
+  function choose(n:CaveNode){if(!graph.nodes.some(x=>x.id===n.id)){previewNode=n;return;}previewNode=null;id=n.id;name=n.name;kind=n.kind;height=n.height_m;radius=n.radius_m;description=n.description;latitude=n.position.lat_deg;longitude=n.position.lon_deg;altitude=n.position.altitude_m;nodeEra=n.era_id??'';flooded=n.water_level_m!==undefined;floodLevel=n.water_level_m??n.position.altitude_m;onselect(n.position);show3d=false;}
   function add(){try{
     const p=authoringProject(project);let position:Position;
     if(node){if(node.locked)throw new Error('Unlock this node before editing.');position={lat_deg:latitude,lon_deg:longitude,altitude_m:altitude};}
@@ -56,15 +60,18 @@
   <header><div><p class="eyebrow">BENEATH THE ATLAS</p><h2>Underground passages</h2></div><span>{nodes.length} chambers / entrances · {edges.length} passages</span></header>
   <div class="subsurface-layout">
     <div class="cave-diagrams">
+      <CaveGenerator {project} {raster} {selection} onpreview={g=>{generatedPreview=g;previewNode=null;proposal=null;}} onapply={g=>{const p=decodeProject({...authoringProject(project),caves:g});onchange(p,'Applied seeded underground network');}}/>
+      {#if preview}<p class="cave-preview-banner" role="status">Reviewing unsaved underground geometry · {preview.nodes.length} new nodes</p>{/if}
+      {#if previewNode}<div class="cave-preview-review" data-testid="cave-preview-inspection"><strong>{previewNode.name}</strong><p>Depth {sampleElevation(raster,previewNode.position)-previewNode.position.altitude_m} m below local ground · altitude {previewNode.position.altitude_m} m · radius {previewNode.radius_m} m · height {previewNode.height_m} m</p></div>{/if}
       <div class="map-toolbar"><label class="check-label"><input type="checkbox" bind:checked={sliceEnabled}/>Depth slice</label><label>Altitude (m)<input aria-label="Underground slice altitude" type="number" min="-20000" max="20000" bind:value={slice}/></label><button class="secondary" onclick={()=>show3d=!show3d}>{show3d?'Show section':'Local 3D cave'}</button></div>
-      {#if show3d}{#key JSON.stringify(graph)}<CaveScene graph={{nodes,edges}} radius_m={project.planet.radius_m}/>{/key}
+      {#if show3d}{#key JSON.stringify(viewGraph)}<CaveScene graph={{nodes,edges}} radius_m={project.planet.radius_m}/>{/key}
       {:else}<svg viewBox="0 0 700 250" role="img" aria-label="Underground depth section" data-testid="cave-section">
         <rect width="700" height="250" fill="#ede5d7"/><line x1="30" x2="675" y1={diagram.seaY} y2={diagram.seaY} stroke="#53879e" stroke-dasharray="5 4"/>
         {#if sliceEnabled}<line x1="30" x2="675" y1={diagram.sliceY} y2={diagram.sliceY} stroke="#ac4236" stroke-dasharray="3 3"/>{/if}
         {#each edges as e}{@const a=diagram.points.find(p=>p.n.id===e.from)}{@const b=diagram.points.find(p=>p.n.id===e.to)}{#if a&&b}<line x1={a.x} x2={b.x} y1={a.y} y2={b.y} stroke={e.kind==='portal'?'#a54d83':'#85735f'} stroke-width="3" stroke-dasharray={e.kind==='portal'?'5 4':'none'}/>{/if}{/each}
-        {#each diagram.points as p}<line x1={p.x} x2={p.x} y1={p.ground} y2={p.y} stroke="#89977d" stroke-dasharray="2 3"/><circle cx={p.x} cy={p.ground} r="2" fill="#617655"/>
-          <g role="button" tabindex="0" aria-label={'Inspect cave '+p.n.name} onclick={()=>choose(p.n)} onkeydown={e=>{if(['Enter',' '].includes(e.key)){e.preventDefault();choose(p.n);}}} opacity={sliceEnabled&&Math.abs(p.n.position.altitude_m-slice)>p.n.height_m/2?.25:1}>
-            <ellipse cx={p.x} cy={p.y} rx="12" ry={p.r} fill={p.n.id===id?'#ac4236':'#3f686e'}/><text x={p.x+14} y={p.y-8} font-size="11" fill="#363d39">{p.n.name}</text>
+        {#each diagram.points as p,index}<line x1={p.x} x2={p.x} y1={p.ground} y2={p.y} stroke="#89977d" stroke-dasharray="2 3"/><circle cx={p.x} cy={p.ground} r="2" fill="#617655"/>
+          <g role="button" tabindex="0" style="pointer-events:bounding-box;cursor:pointer" aria-label={'Inspect cave '+p.n.name} onclick={()=>choose(p.n)} onkeydown={e=>{if(['Enter',' '].includes(e.key)){e.preventDefault();choose(p.n);}}} opacity={sliceEnabled&&Math.abs(p.n.position.altitude_m-slice)>p.n.height_m/2?.25:1}>
+            <title>{p.n.name} · {sampleElevation(raster,p.n.position)-p.n.position.altitude_m} m below ground</title><ellipse data-testid={preview?.nodes.some(n=>n.id===p.n.id)?'cave-preview-node':undefined} cx={p.x} cy={p.y} rx="12" ry={p.r} fill={p.n.id===id?'#ac4236':'#3f686e'}/><text x={Math.min(570,p.x+14)} y={p.y-8} font-size="11" fill="#363d39">{p.n.id===(previewNode?.id??id)?p.n.name:index+1}</text>
           </g>{/each}
         <text x="8" y="15" font-size="11">{Math.round(diagram.high)} m</text><text x="8" y="243" font-size="11">{Math.round(diagram.low)} m</text><text x="675" y="241" text-anchor="end" font-size="11">0–{diagram.maxX.toFixed(2)} km from first visible node</text>
       </svg>

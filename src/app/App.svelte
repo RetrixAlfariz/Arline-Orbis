@@ -35,6 +35,7 @@
   import FieldworkBar from './FieldworkBar.svelte';
   import FloatingPanel from './FloatingPanel.svelte';
   import WorkspaceMenu from './WorkspaceMenu.svelte';
+  import StudioIcon from './StudioIcon.svelte';
   import type { Visit } from './FieldworkBar.svelte';
 
   let project = $state<Project>(newProject());
@@ -47,7 +48,7 @@
   function terrainInput(p:Project):TerrainInput { return {planet:p.planet,strokes:p.terrain_strokes??[],regions:p.regional_replacements??[],
     options:p.generation_options??{...DEFAULT_OPTIONS},width:p.generation_options?.resolution??360,height:(p.generation_options?.resolution??360)/2+1}; }
   const systemInput = $derived(terrainInput(project));
-  const workerTerrain = $derived(planet.algorithm_version==='m4-plates-v1'||project.version===4);
+  const workerTerrain = $derived(planet.algorithm_version==='m4-plates-v1'||planet.algorithm_version==='m5-continuous-v1'||project.version===4);
   let workshopOpen=$state(false),workshopMinimized=$state(false);
   let workshopPreview=$state.raw<WorkshopView|null>(null);
   let workshopPoint=$state<Coordinate>({lat_deg:30,lon_deg:-55});
@@ -506,6 +507,14 @@
 <svelte:head><meta name="description" content="A local planetary atlas for storytelling. Explore a sample world in 2D and 3D." /></svelte:head>
 
 <header class="app-header menu-header">
+  <div class="studio-brand"><StudioIcon /><div><span>ARLINE ORBIS</span><small>Explore · Map · Understand</small></div></div>
+  <nav class="studio-navigation" aria-label="Studio navigation">
+    <button aria-pressed={pane==='world'&&mode==='atlas'&&!workshopOpen} onclick={()=>{pane='world';changeMode('atlas');}}><StudioIcon kind="atlas"/><span>Atlas</span></button>
+    <button aria-pressed={pane==='world'&&mode==='globe'&&!workshopOpen} onclick={()=>{pane='world';changeMode('globe');}}><StudioIcon kind="globe"/><span>Globe</span></button>
+    <button aria-pressed={workshopOpen} disabled={!ready||systemsLoading} onclick={openWorkshop}><StudioIcon kind="terrain"/><span>Terrain</span></button>
+    <button disabled={!canEdit} onclick={()=>openTool('.authoring-panel')}><StudioIcon kind="journal"/><span>Lore</span></button>
+    <button aria-pressed={fieldworkOpen&&!fieldworkMinimized} onclick={()=>togglePanel('fieldwork')}><StudioIcon kind="places"/><span>Fieldwork</span></button>
+  </nav>
   <nav class="application-menu" aria-label="Application menu">
     <WorkspaceMenu label="ORBIS">
       <span class="menu-caption">Orbis / Terrain studio</span>
@@ -561,9 +570,10 @@
   {#if fieldworkOpen && fieldworkMinimized}<button onclick={() => togglePanel('fieldwork')} aria-label="Restore Fieldwork">Fieldwork <span>Restore</span></button>{/if}
   {#if workshopOpen && workshopMinimized}<button onclick={()=>workshopMinimized=false} aria-label="Restore Generation Workshop">Generation <span>Restore</span></button>{/if}
 </nav>
-<main class:focus-map={focusMap} class:alternate-workspace={pane!=='world'} class:generation-active={workshopOpen}>
+<main class:focus-map={focusMap} class:alternate-workspace={pane!=='world'} class:generation-active={workshopOpen} class:places-visible={placesOpen&&!placesMinimized} class:inspector-visible={inspectorOpen&&!inspectorMinimized}>
   <FloatingPanel id="places" title="Places & files" bind:open={placesOpen} bind:minimized={placesMinimized} reset={layoutReset}>
   <aside class="places-panel" aria-label="Places">
+    <div class="world-card"><div class="world-medallion" style:background-image={texture?`url(${texture.toDataURL()})`:undefined}></div><div><span class="eyebrow">Current world</span><p class="world-card-title">{planet.name}</p><p>{isSampleWorld?'A planetary atlas': 'An authored world'}</p></div></div>
     <div class="panel-heading"><h2>Field journal</h2><span class="count">{(isSampleWorld ? SAMPLE_SITES.length : 0) + landmarks.length}</span></div>
     <details class="new-world-panel">
       <summary>+ Create new world</summary>
@@ -603,7 +613,7 @@
   </FloatingPanel>
 
   <section class="workspace" aria-label="Planetary atlas">
-    <div class="workspace-top"><div class="world-heading"><div class="viewport-title"><h1>{planet.name}</h1><span>Viewport</span></div>
+    <div class="workspace-top"><div class="world-heading"><div class="viewport-title"><span class="eyebrow">Worlds / {planet.name}</span><h1>{planet.name}</h1><span>Explore the geography. Shape the story.</span></div>
       <div class="mode-switch" aria-label="View mode">
         <button class:active={mode === 'atlas'} aria-pressed={mode === 'atlas'} onclick={() => changeMode('atlas')}>2D Atlas</button>
         <button class:active={mode === 'globe'} aria-pressed={mode === 'globe'} onclick={() => changeMode('globe')}>3D Globe</button>
@@ -638,6 +648,7 @@
         </div>
       </div>
       <div class="viewport" class:globe-mode={mode === 'globe'} class:sculpt-mode={sculptMode}>
+        <div class="cartographic-compass" aria-hidden="true"><span>N</span><StudioIcon /><span>S</span></div>
         {#if viewTexture}
           {#if mode === 'atlas'}<Atlas texture={viewTexture} selection={viewSelection} {landmarks} {showGrid} {showLabels} worldName={planet.name} sampleRegions={isSampleWorld&&!workshopOpen} sculptMode={sculptMode&&!workshopOpen} brushRadiusKm={brushRadius} planetRadius_m={planet.radius_m} projectionKind={projectionKind} projectionCenter={projectionCenter} features={visibleFeatures} drawingVertices={drawingVertices} rivers={workshopPreview?.data.hydro?.rivers??(workerTerrain?systemsData?.hydro?.rivers??[]:[])} regionBoundary={workshopBoundary} disableExport={workshopOpen} measurementStart={measureStart} onselect={workshopOpen?previewPick:selectOrSculpt} onhover={(point) => hover = point} />
           {:else}<Globe texture={viewTexture} raster={viewRaster} radius_m={planet.radius_m} selection={viewSelection} {landmarks} features={visibleFeatures} onselect={workshopOpen?previewPick:select} onhover={(point) => hover = point} onerror={globeError} />{/if}

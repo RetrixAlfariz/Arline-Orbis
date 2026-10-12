@@ -17,13 +17,14 @@
   const mobile = () => window.innerWidth <= 760;
 
   function clamp() {
-    const width = panel.offsetWidth || Math.min(324, window.innerWidth - 16);
+    const width = panel.offsetWidth || Math.min(id === 'places' ? 280 : 308, window.innerWidth - 16);
     x = Math.max(8, Math.min(x, window.innerWidth - width - 8));
-    y = Math.max(112, Math.min(y, window.innerHeight - 100));
+    y = Math.max(124, Math.min(y, window.innerHeight - 100));
   }
   function defaults() {
-    x = side === 'right' ? window.innerWidth - 340 : side === 'center' ? (window.innerWidth - 324) / 2 : 16;
-    y = side === 'center' ? window.innerHeight - 320 : 160;
+    const width = id === 'generation' ? 360 : id === 'places' ? 280 : 308;
+    x = side === 'right' ? window.innerWidth - width - 16 : side === 'center' ? (window.innerWidth - width) / 2 : 16;
+    y = side === 'center' ? window.innerHeight - 320 : 128;
     clamp();
   }
   function save() {

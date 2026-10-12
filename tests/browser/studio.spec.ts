@@ -1,0 +1,51 @@
+import { test, expect } from '@playwright/test';
+
+test('studio shortcuts, movable panels and repeated workshop close flows preserve the world', async ({ page }) => {
+  test.setTimeout(60000);
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/');
+  const navigation = page.getByRole('navigation', { name: 'Studio navigation' });
+  const before = await page.getByTestId('elevation').innerText();
+  const places = page.locator('[data-panel=places]');
+  const initial = (await places.boundingBox())!;
+  const handle = page.getByRole('button', { name: 'Move Places & files panel', exact: true });
+  await handle.focus(); await page.keyboard.press('Shift+ArrowRight');
+  expect((await places.boundingBox())!.x).toBe(initial.x + 40);
+  const box = (await handle.boundingBox())!;
+  await page.mouse.move(box.x + 70, box.y + 18); await page.mouse.down();
+  await page.mouse.move(box.x + 160, box.y + 80, { steps: 6 }); await page.mouse.up();
+  expect((await places.boundingBox())!.y).toBeGreaterThan(initial.y);
+  await page.getByRole('button', { name: 'Minimize Places & files', exact: true }).click();
+  await expect(places).toBeHidden();
+  await page.getByRole('button', { name: 'Restore Places & files', exact: true }).click();
+  await page.getByRole('button', { name: 'Close Places & files', exact: true }).click();
+  await page.getByText('Layout', { exact: true }).click();
+  await page.getByRole('button', { name: 'Reset layout', exact: true }).click();
+  await expect(places).toBeVisible();
+  expect((await places.boundingBox())!.x).toBe(initial.x);
+  for (let i = 0; i < 2; i++) {
+    await navigation.getByRole('button', { name: 'Globe', exact: true }).click();
+    await expect(page.locator('.globe canvas')).toBeVisible();
+    await navigation.getByRole('button', { name: 'Atlas', exact: true }).click();
+    await expect(page.locator('.atlas')).toBeVisible();
+    await navigation.getByRole('button', { name: 'Fieldwork', exact: true }).click();
+    await expect(page.locator('[data-panel=fieldwork]')).toBeVisible();
+    await page.getByRole('button', { name: 'Close Fieldwork', exact: true }).click();
+    await navigation.getByRole('button', { name: 'Terrain', exact: true }).click();
+    await navigation.getByRole('button', { name: 'Terrain', exact: true }).click();
+    await expect(page.locator('[data-panel=generation]')).toBeVisible();
+    await page.getByRole('button', { name: 'Return to world', exact: true }).click();
+    await expect(page.locator('.generation-preview-banner')).toHaveCount(0);
+  }
+  await navigation.getByRole('button', { name: 'Lore', exact: true }).click();
+  await expect(page.getByLabel('Feature name', { exact: true })).toBeVisible();
+  await page.getByText('File', { exact: true }).click();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('group', { name: 'File commands' })).toBeHidden();
+  await page.getByText('View', { exact: true }).click();
+  await navigation.getByRole('button', { name: 'Atlas', exact: true }).click();
+  await expect(page.getByRole('group', { name: 'View commands' })).toBeHidden();
+  await expect(page.getByTestId('elevation')).toHaveText(before);
+  expect(errors).toEqual([]);
+});

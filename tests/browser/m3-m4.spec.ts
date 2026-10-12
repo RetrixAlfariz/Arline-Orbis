@@ -65,7 +65,7 @@ test('generation runs off-thread, is cancellable, and commits only a reviewed de
   test.setTimeout(90000);
   await page.goto('/');
   const before=await page.getByTestId('elevation').innerText();
-  await page.getByText('Planetary generation · M4',{exact:true}).click();
+  await page.getByText('Planetary generation',{exact:true}).click();await page.getByLabel('Generation algorithm',{exact:true}).selectOption('m4-plates-v1');
   await page.getByLabel('Generation detail',{exact:true}).selectOption('1440');
   await page.getByRole('button',{name:'Preview generation',exact:true}).click();
   await page.getByRole('button',{name:'Cancel generation',exact:true}).click();
@@ -95,7 +95,7 @@ test('locked location conflicts require acknowledgement and preserve authored he
   test.setTimeout(60000);
   await page.goto('/');await page.getByLabel('Landmark name',{exact:true}).fill('Protected canon');await page.getByLabel('Authored elevation (m)',{exact:true}).fill('4800');
   await page.getByRole('button',{name:'Set landmark',exact:true}).click();await page.getByRole('button',{name:'Lock landmark',exact:true}).click();
-  await page.getByText('Planetary generation · M4',{exact:true}).click();await page.getByRole('button',{name:'Preview generation',exact:true}).click();await expect(page.getByTestId('generation-preview')).toBeVisible({timeout:30000});
+  await page.getByText('Planetary generation',{exact:true}).click();await page.getByLabel('Generation algorithm',{exact:true}).selectOption('m4-plates-v1');await page.getByRole('button',{name:'Preview generation',exact:true}).click();await expect(page.getByTestId('generation-preview')).toBeVisible({timeout:30000});
   await expect(page.getByRole('button',{name:'Apply generated world',exact:true})).toBeDisabled();
   await page.getByLabel('Accept reviewed terrain changes',{exact:true}).check();await page.getByRole('button',{name:'Apply generated world',exact:true}).click();
   await expect(page.getByTestId('elevation')).toHaveText('+4,800 m');await expect(page.getByRole('button',{name:'Update landmark',exact:true})).toBeDisabled();await saved(page);

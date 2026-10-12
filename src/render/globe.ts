@@ -92,12 +92,29 @@ export function createGlobe(host: HTMLElement, textureCanvas: HTMLCanvasElement,
   let frame = 0;
   let disposed = false;
   let currentSelection: Coordinate | null = null;
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  let cameraMotion: { start: THREE.Vector3; target: THREE.Vector3; rotation: THREE.Quaternion; since: number } | null = null;
+  function finishCameraMotion() {
+    if (!cameraMotion) return;
+    camera.position.copy(cameraMotion.target); cameraMotion = null; controls.update(); draw();
+  }
 
   function draw() {
     if (disposed || frame) return;
     frame = requestAnimationFrame(() => {
       frame = 0;
-      if (!disposed) renderer.render(scene, camera);
+      if (!disposed) {
+        if (cameraMotion) {
+          const t = reducedMotion.matches ? 1 : Math.min(1, (performance.now() - cameraMotion.since) / 420);
+          const eased = t * t * (3 - 2 * t);
+          const rotation = new THREE.Quaternion().slerp(cameraMotion.rotation, eased);
+          camera.position.copy(cameraMotion.start).applyQuaternion(rotation);
+          if (t === 1) { camera.position.copy(cameraMotion.target); cameraMotion = null; }
+          controls.update();
+        }
+        renderer.render(scene, camera);
+        if (cameraMotion) draw();
+      }
     });
   }
   function resize() {
@@ -128,7 +145,7 @@ export function createGlobe(host: HTMLElement, textureCanvas: HTMLCanvasElement,
     return fromVector(hit.point.x, hit.point.y, hit.point.z);
   }
   let down: { x: number; y: number; id: number } | null = null;
-  const pointerdown = (event: PointerEvent) => { down = { x: event.clientX, y: event.clientY, id: event.pointerId }; };
+  const pointerdown = (event: PointerEvent) => { finishCameraMotion(); down = { x: event.clientX, y: event.clientY, id: event.pointerId }; };
   const pointerup = (event: PointerEvent) => {
     if (down?.id === event.pointerId && Math.hypot(event.clientX - down.x, event.clientY - down.y) < 5) {
       const point = pick(event);
@@ -145,6 +162,7 @@ export function createGlobe(host: HTMLElement, textureCanvas: HTMLCanvasElement,
   };
   const canvas = renderer.domElement;
   const keydown = (event: KeyboardEvent) => {
+    finishCameraMotion();
     const step = event.shiftKey ? 10 : 1;
     const offsets: Record<string, [number, number]> = { ArrowUp: [step, 0], ArrowDown: [-step, 0], ArrowLeft: [0, -step], ArrowRight: [0, step] };
     if (offsets[event.key]) {
@@ -162,6 +180,7 @@ export function createGlobe(host: HTMLElement, textureCanvas: HTMLCanvasElement,
   canvas.addEventListener('pointerleave', pointerleave);
   canvas.addEventListener('pointercancel', pointercancel);
   canvas.addEventListener('webglcontextlost', contextlost);
+  canvas.addEventListener('wheel', finishCameraMotion, { capture: true, passive: true });
 
   function updateMarkerPosition() {
     if (currentSelection) selectedMarker.position.set(...toVector(currentSelection, visualRadius(currentSelection) + 0.012));
@@ -190,6 +209,7 @@ export function createGlobe(host: HTMLElement, textureCanvas: HTMLCanvasElement,
       draw();
     },
     update(selection: Coordinate | null, landmarks: Landmark[]) {
+      const changed = currentSelection !== null && selection !== null && (currentSelection.lat_deg !== selection.lat_deg || currentSelection.lon_deg !== selection.lon_deg);
       currentSelection = selection;
       markers.clear();
       for (const landmark of landmarks) {
@@ -201,8 +221,11 @@ export function createGlobe(host: HTMLElement, textureCanvas: HTMLCanvasElement,
       selectedMarker.visible = selection !== null;
       if (selection) {
         updateMarkerPosition();
-        camera.position.set(...toVector(selection, camera.position.length()));
-        controls.update();
+        const target = new THREE.Vector3(...toVector(selection, camera.position.length()));
+        if (changed && !reducedMotion.matches) {
+          const start = camera.position.clone();
+          cameraMotion = { start, target, rotation: new THREE.Quaternion().setFromUnitVectors(start.clone().normalize(), target.clone().normalize()), since: performance.now() };
+        } else if (!cameraMotion) { camera.position.copy(target); controls.update(); }
       }
       draw();
     },
@@ -218,6 +241,7 @@ export function createGlobe(host: HTMLElement, textureCanvas: HTMLCanvasElement,
       canvas.removeEventListener('pointerleave', pointerleave);
       canvas.removeEventListener('pointercancel', pointercancel);
       canvas.removeEventListener('webglcontextlost', contextlost);
+      canvas.removeEventListener('wheel', finishCameraMotion, true);
       for (const object of vectors.children) (object as THREE.Line).geometry.dispose(); vectorMaterial.dispose();
       geometry.dispose(); material.dispose(); texture.dispose();
       gridGeometry.dispose(); gridMaterial.dispose();

@@ -12,7 +12,7 @@
       let renderer:InstanceType<typeof THREE.WebGLRenderer>;
       try{renderer=new THREE.WebGLRenderer({antialias:true});}catch{error='3D is unavailable; plan and section remain usable.';return;}
       renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));host.appendChild(renderer.domElement);renderer.domElement.setAttribute('aria-label','Local cave geometry preview');
-      const scene=new THREE.Scene();scene.background=new THREE.Color('#243333');
+      const scene=new THREE.Scene();scene.background=new THREE.Color('#0a151d');
       const origin=graph.nodes[0]?.position??{lat_deg:0,lon_deg:0};
       const group=new THREE.Group();scene.add(group);const positions=new Map<string,InstanceType<typeof THREE.Vector3>>();
       const geometries:InstanceType<typeof THREE.BufferGeometry>[]=[],materials:InstanceType<typeof THREE.Material>[]=[];
@@ -30,7 +30,7 @@
       }
       const box=new THREE.Box3().setFromObject(group),center=box.isEmpty()?new THREE.Vector3():box.getCenter(new THREE.Vector3());group.position.sub(center);
       const extent=box.isEmpty()?500:Math.max(100,box.getSize(new THREE.Vector3()).length());
-      const camera=new THREE.PerspectiveCamera(40,1,.1,extent*30);camera.position.set(extent,.4*extent,extent);
+      const camera=new THREE.PerspectiveCamera(40,1,.1,extent*30);camera.position.set(.65*extent,.5*extent,.65*extent);
       const controls=new OrbitControls(camera,renderer.domElement);controls.target.set(0,0,0);controls.minDistance=10;controls.maxDistance=extent*10;
       scene.add(new THREE.AmbientLight('#fff6e0',2));const sun=new THREE.DirectionalLight('#ffffff',2);sun.position.set(extent,extent,extent);scene.add(sun);
       let frame=0;const draw=()=>{if(!frame&&!disposed)frame=requestAnimationFrame(()=>{frame=0;renderer.render(scene,camera);});};

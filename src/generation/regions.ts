@@ -8,7 +8,7 @@ export interface RegionalReplacement extends Coordinate {
   radius_km: number;
   seed: string;
   options: GenerationOptions;
-  algorithm_version: 'regional-geology-v1';
+  algorithm_version: 'regional-geology-v1' | 'regional-continuous-v2';
 }
 export const MAX_REGIONAL_REPLACEMENTS = 16;
 export function validateRegions(value: unknown): RegionalReplacement[] {
@@ -19,13 +19,13 @@ export function validateRegions(value: unknown): RegionalReplacement[] {
     const p = raw as Record<string, unknown>;
     if (typeof p.id !== 'string' || !p.id || p.id.length > 100 || ids.has(p.id)) throw new Error('Invalid or duplicate regional replacement ID.');
     ids.add(p.id);
-    if (p.algorithm_version !== 'regional-geology-v1') throw new Error('Unsupported regional generation algorithm.');
+    if (p.algorithm_version !== 'regional-geology-v1' && p.algorithm_version !== 'regional-continuous-v2') throw new Error('Unsupported regional generation algorithm.');
     if (typeof p.seed !== 'string' || !p.seed.trim() || p.seed.length > 100) throw new Error('Invalid regional seed.');
     if (typeof p.radius_km !== 'number' || !Number.isFinite(p.radius_km) || p.radius_km < 1 || p.radius_km > 2500) throw new Error('Regional radius must be 1–2,500 km.');
     if (typeof p.lat_deg !== 'number' || !Number.isFinite(p.lat_deg) || p.lat_deg < -90 || p.lat_deg > 90 ||
         typeof p.lon_deg !== 'number' || !Number.isFinite(p.lon_deg) || p.lon_deg < -180 || p.lon_deg > 180) throw new Error('Invalid regional center.');
     return { id: p.id, ...coordinate(p.lat_deg, p.lon_deg), radius_km: p.radius_km, seed: p.seed,
-      options: validateOptions(p.options), algorithm_version: 'regional-geology-v1' };
+      options: validateOptions(p.options), algorithm_version: p.algorithm_version };
   });
 }
 

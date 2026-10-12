@@ -1,0 +1,24 @@
+{
+  "seed": "aurelia-001",
+  "algorithm": "m5-continuous-v1",
+  "options": {
+    "resolution": 360,
+    "plate_count": 14,
+    "continental_fraction": 0.38,
+    "roughness": 1,
+    "ridge_m": 2200,
+    "rift_m": 600,
+    "trench_m": 4000,
+    "seamount_m": 2800,
+    "erosion": true,
+    "hydrology": false,
+    "climate": false,
+    "detail_m": 100
+  },
+  "elapsed_ms": 2382.2000000476837,
+  "commonSamples": 259920,
+  "different": 0,
+  "maxDifference_m": 0,
+  "worstTinyStep_m": 0,
+  "legacyHash": "43675927ada3c0c3c32ef9c351a8c80c615a8d69a17fd2fb24d56f08181022d9"
+}

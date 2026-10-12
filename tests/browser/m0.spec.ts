@@ -94,10 +94,10 @@ test('atlas pointer, keyboard, seam coordinates and seabed fixtures work without
   expect(errors).toEqual([]);
 });
 
-test('mobile layout fits and app requests no external service', async ({ page }) => {
+test('mobile layout fits and app requests no external service', async ({ page, baseURL }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const external: string[] = [];
-  page.on('request', (request) => { if (!request.url().startsWith('http://127.0.0.1:4173')) external.push(request.url()); });
+  page.on('request', (request) => { if (!request.url().startsWith(baseURL!)) external.push(request.url()); });
   await page.goto('/');
   await page.getByText('Layout', { exact: true }).click();
   await page.getByRole('button', { name: 'Places & files', exact: true }).click();

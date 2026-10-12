@@ -10,6 +10,7 @@ import { erode, drain, climate, normalizePoles } from './hydrology';
 import type { Hydro } from './hydrology';
 import { replaceRegion, validateRegions, type RegionalReplacement } from './regions';
 import { stageCopy, type StageFrame, type StageId } from './stages';
+import { continuousTerrain } from './continuous';
 export interface TerrainInput { planet: Planet; strokes: TerrainStroke[]; options?: GenerationOptions; regions?: RegionalReplacement[]; width?: number; height?: number }
 export interface WorldData {
   raster: ElevationRaster; plates: Uint8Array; landforms: Uint8Array;
@@ -26,22 +27,29 @@ export function generateWorld(input:TerrainInput,progress:(stage:string,pct:numb
   let raster:ElevationRaster={width:w,height:h,samples:new Int16Array(n)};
   const plates=new Uint8Array(n),landforms=new Uint8Array(n);let centers:WorldData['plate_centers']=[];
   const regions=validateRegions(input.regions??[]);
-  const plateBased=input.planet.algorithm_version==='m4-plates-v1';
+  const corrected=input.planet.algorithm_version==='m5-continuous-v1';
+  const plateBased=input.planet.algorithm_version==='m4-plates-v1'||corrected;
   const options=plateBased||regions.length?validateOptions(input.options??DEFAULT_OPTIONS):null;
   let sediment:Float32Array=new Float32Array(n),temperature=new Float32Array(n),rainfall=new Uint16Array(n),biome=new Uint8Array(n),hydro:Hydro|null=null;
   const frame=(id:StageId,skipped=false,ms=0)=>{if(onStage)onStage({id,skipped,ms,data:stageCopy({raster,plates,landforms,temperature,rainfall,biome,sediment,hydro,plate_centers:centers,timings,options})});};
   progress('Continents and bathymetry',2);
-  if(plateBased&&options){const model=makePlateModel(input.planet.seed,options);centers=model.plateCenters;
+  let continuous:ReturnType<typeof continuousTerrain>|undefined;
+  if(corrected&&options){
+    continuous=continuousTerrain(input.planet.seed,options,input.planet.radius_m,p=>progress('Continuous spherical geology',5+p*.48));centers=continuous.plateCenters;
+    for(let y=0;y<h;y++)for(let x=0;x<w;x++){const i=y*w+x,s=continuous.at({lat_deg:90-y*180/(h-1),lon_deg:-180+x*360/w});raster.samples[i]=s.raw;plates[i]=s.plate;landforms[i]=s.landform;}
+  }else if(plateBased&&options){const model=makePlateModel(input.planet.seed,options);centers=model.plateCenters;
     for(let y=0;y<h;y++){for(let x=0;x<w;x++){const i=y*w+x,point={lat_deg:90-y*180/(h-1),lon_deg:-180+x*360/w};const s=model.sample(point);raster.samples[i]=s.elevation_m;plates[i]=s.plate;landforms[i]=s.landform;}
       if(y%24===0)progress('Continents and bathymetry',5+y/h*48);}
     normalizePoles(raster.samples,w,h);
   }else raster=generatePlanet(input.planet.seed,input.planet.algorithm_version as 'm0-sample-v1'|'m2-seeded-v1',w,h);
   timings.geology=now()-start;frame('tectonics',!plateBased,timings.geology);frame('terrain',false,timings.geology);start=now();
-  if(plateBased&&options?.erosion){progress('Erosion and sediment',57);const e=erode(raster);raster=e.raster;sediment=e.sediment;}
+  if(corrected&&continuous&&options?.erosion){progress('Fixed-scale erosion and sediment',57);
+    const samples=new Int16Array(n);for(let y=0;y<h;y++)for(let x=0;x<w;x++){const i=y*w+x,s=continuous.at({lat_deg:90-y*180/(h-1),lon_deg:-180+x*360/w});samples[i]=s.elevation;sediment[i]=s.sediment;}raster={width:w,height:h,samples};
+  }else if(plateBased&&options?.erosion){progress('Erosion and sediment',57);const e=erode(raster);raster=e.raster;sediment=e.sediment;}
   timings.erosion=now()-start;frame('erosion',!plateBased||!options?.erosion,timings.erosion);start=now();
   for(const region of regions){
     progress('Regional replacement '+region.id,60);
-    const replacement=generateWorld({planet:{...input.planet,seed:region.seed,algorithm_version:'m4-plates-v1'},strokes:[],options:{...region.options,climate:false,hydrology:false},width:w,height:h});
+    const replacement=generateWorld({planet:{...input.planet,seed:region.seed,algorithm_version:region.algorithm_version==='regional-continuous-v2'?'m5-continuous-v1':'m4-plates-v1'},strokes:[],options:{...region.options,climate:false,hydrology:false},width:w,height:h});
     const blended=replaceRegion(raster,replacement.raster,region,input.planet.radius_m);raster=blended.raster;
     for(let i=0;i<n;i++)if(blended.weights[i]>0){if(blended.weights[i]>=.5){plates[i]=replacement.plates[i];landforms[i]=replacement.landforms[i];}sediment[i]=sediment[i]*(1-blended.weights[i])+replacement.sediment[i]*blended.weights[i];}
     if(!centers.length)centers=replacement.plate_centers;

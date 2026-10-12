@@ -52,8 +52,8 @@ export function decodeProject(input: string | unknown): Project {
   if (typeof input !== 'string' && new TextEncoder().encode(JSON.stringify(root)).length > MAX_PROJECT_BYTES) throw new Error('Project exceeds the 2 MB limit.');
   if (root.format !== 'orbis-project' || ![0,1,2,3,4].includes(root.version as number)) throw new Error('Unsupported Orbis project format or version.');
   const p = object(root.planet);
-  if (p.algorithm_version !== 'm0-sample-v1' && p.algorithm_version !== 'm2-seeded-v1' && p.algorithm_version !== 'm4-plates-v1') throw new Error('Unsupported terrain algorithm. Import has not changed your workspace.');
-  if (p.algorithm_version === 'm4-plates-v1' && Number(root.version) < 3) throw new Error('Plate generation requires project version 3.');
+  if (p.algorithm_version !== 'm0-sample-v1' && p.algorithm_version !== 'm2-seeded-v1' && p.algorithm_version !== 'm4-plates-v1' && p.algorithm_version !== 'm5-continuous-v1') throw new Error('Unsupported terrain algorithm. Import has not changed your workspace.');
+  if ((p.algorithm_version === 'm4-plates-v1'||p.algorithm_version === 'm5-continuous-v1') && Number(root.version) < 3) throw new Error('Plate generation requires project version 3.');
   const planet = { ...p, id: text(p.id, 100), name: text(p.name, 80), seed: text(p.seed, 100),
     radius_m: number(p.radius_m, 1000, 1_000_000_000), sea_level_m: number(p.sea_level_m, -20_000, 20_000),
     algorithm_version: p.algorithm_version as Planet['algorithm_version'] } as Planet;

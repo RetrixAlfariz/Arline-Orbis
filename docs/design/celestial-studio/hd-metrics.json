@@ -1,0 +1,14 @@
+[
+  {
+    "erosion": false,
+    "different": 0,
+    "maxDifference_m": 0,
+    "meanDifference_m": 0
+  },
+  {
+    "erosion": true,
+    "different": 89453,
+    "maxDifference_m": 672,
+    "meanDifference_m": 12.18705896007428
+  }
+]

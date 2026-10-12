@@ -13,12 +13,14 @@
   import { terrainTexture } from '../render/terrainTexture';
   import { systemTexture, LAYER_LABELS, type SystemLayer } from '../render/systemTexture';
   import { regenerationConflicts } from '../authoring/conflicts';
+  import { M5_NOISE_DEFAULTS } from './continuous';
   let { project, raster, active, visible, point, onpreview, onregion, onapply, onexit, onatlas }: {
     project:Project; raster:ElevationRaster; active:boolean; visible:boolean; point:Coordinate;
     onpreview:(view:WorkshopView|null)=>void; onregion:(region:{center:Coordinate;radius_km:number}|null)=>void; onapply:(p:Project,data:WorldData)=>void; onexit:()=>void; onatlas:()=>void;
   }=$props();
   type Candidate={seed:string; data:WorldData; image:string; proposed:Project};
   let options=$state<GenerationOptions>({...DEFAULT_OPTIONS}),seed=$state(''),sea=$state(0);
+  let algorithm=$state<'m4-plates-v1'|'m5-continuous-v1'>('m5-continuous-v1');
   let scope=$state<'world'|'region'|'remove'>('world'),radius=$state(500),center=$state<Coordinate>({lat_deg:30,lon_deg:-55});
   let selection=$state<Coordinate>({lat_deg:30,lon_deg:-55}),selected=$state(0),stage=$state<StageId>('review');
   let climateLayer=$state<'temperature'|'rainfall'>('temperature');
@@ -30,7 +32,7 @@
   let busy=$state(false),progress=$state(''),pct=$state(0),error=$state(''),ack=$state(false),memory=$state(0);
   let lastWorld='',suspended=false;
   const fingerprint=$derived(projectFingerprint(project));
-  const settings=$derived(JSON.stringify({options,seed,sea,scope,radius,center,removed}));
+  const settings=$derived(JSON.stringify({options,seed,sea,scope,radius,center,removed,algorithm}));
   const recipe=$derived(RECIPES.find(r=>JSON.stringify(r.options)===JSON.stringify(options)&&r.sea_level_m===sea)?.name??'Custom');
   const selectedCandidate=$derived(candidates[selected]);
   const conflicts=$derived(finalData?regenerationConflicts(project,raster,finalData.raster):[]);
@@ -81,7 +83,7 @@
     if(!seed.trim()||seed.length>100)throw new Error('Enter a seed of 1–100 characters.');
     const config=validateOptions(options);
     if(scope!=='world')config.resolution=raster.width as GenerationOptions['resolution'];
-    return proposedWorld(project,candidateSeeds(seed)[which],config,sea,scope==='region'?{id:regionId,center,radius_km:radius}:null,removed,scope==='remove');
+    return proposedWorld(project,candidateSeeds(seed)[which],config,sea,scope==='region'?{id:regionId,center,radius_km:radius}:null,removed,scope==='remove',algorithm);
   }
   async function run(which:number,full:boolean,id:number):Promise<Candidate|null>{
     const proposed=proposal(which),config=proposed.generation_options!;
@@ -117,11 +119,14 @@
 <div class="generation-workshop" class:review-section={section==='review'} aria-label="Generation workshop controls">
   <nav class="workshop-nav" aria-label="Workshop sections">{#each ['parameters','stages','review'] as tab}<button aria-pressed={section===tab} onclick={()=>{section=tab as typeof section;if(tab==='review')stage='review';}}>{tab[0].toUpperCase()+tab.slice(1)}</button>{/each}</nav>
   <div class="workshop-pane" hidden={section!=='parameters'} aria-label="Generation parameters">
+  <label>Terrain algorithm<select aria-label="Workshop algorithm" bind:value={algorithm}><option value="m5-continuous-v1">M5 · Continuous terrain</option><option value="m4-plates-v1">M4 · Legacy plates</option></select></label>
+  <p class="help-text">M5 blends plate contributions continuously and uses one fixed-scale erosion field. Saved worlds change algorithm only after Apply.</p>
   <div class="workshop-scope"><button aria-pressed={scope==='world'} onclick={()=>scope='world'}>Whole world</button><button aria-pressed={scope==='region'} onclick={regionMode}>Replace region</button></div>
   {#if scope==='remove'}<p class="help-text">Review regional edit removals. Base seed and geological algorithm are preserved.</p>{/if}
   <label>World recipe<select aria-label="World recipe" value={recipe} onchange={e=>preset(e.currentTarget.value)}><option value="Custom" disabled>Custom</option>{#each RECIPES as r}<option>{r.name}</option>{/each}</select></label>
   <p class="help-text">Recipes guide the geography; individual results vary by seed.</p>
   <label>Geology seed<input aria-label="Workshop seed" bind:value={seed} maxlength="100" disabled={scope==='remove'} /></label>
+  {#if algorithm==='m5-continuous-v1'}<details><summary>Terrain-specific detail</summary>{#each [['hill_detail_m','Broad hills',500],['mountain_detail_m','Mountain crests',1600],['rock_detail_m','Fine mountain relief',200]] as [key,label,max]}<label>{label} (m)<input type="number" aria-label={`Workshop ${label}`} value={options[key as keyof typeof M5_NOISE_DEFAULTS]??M5_NOISE_DEFAULTS[key as keyof typeof M5_NOISE_DEFAULTS]} min="0" max={max} oninput={e=>options={...options,[key]:e.currentTarget.valueAsNumber}}/></label>{/each}<p class="help-text">Hills: 450–900 km; mountain crests: 300–600 km; fine mountain relief: 240 km on an Earth-size world. Detail is masked to mountain belts and sampled consistently in Standard/High.</p></details>{/if}
   {#if scope==='region'}
     <p class="help-text">Pick a center in the atlas. Boundary includes a 20% blended edge. Locked content is protected.</p>
     <div class="coordinate-inputs"><label>Latitude<input aria-label="Region latitude" type="number" bind:value={center.lat_deg} min="-90" max="90" step="any" /></label><label>Longitude<input aria-label="Region longitude" type="number" bind:value={center.lon_deg} min="-180" max="180" step="any" /></label></div>

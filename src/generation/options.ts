@@ -5,6 +5,7 @@ export interface GenerationOptions {
   ridge_m: number; rift_m: number; trench_m: number; seamount_m: number;
   erosion: boolean; hydrology: boolean; climate: boolean;
   detail_m: number;
+  hill_detail_m?: number; mountain_detail_m?: number; rock_detail_m?: number;
 }
 export const DEFAULT_OPTIONS: GenerationOptions = {
   resolution: 360, plate_count: 14, continental_fraction: 0.38, roughness: 1,
@@ -20,5 +21,8 @@ export function validateOptions(value: unknown): GenerationOptions {
   return { resolution: resolution as 360|720|1440, plate_count, continental_fraction: finite(p.continental_fraction, .1, .8), roughness: finite(p.roughness, 0, 2),
     ridge_m: finite(p.ridge_m, 0, 5000), rift_m: finite(p.rift_m, 0, 2000), trench_m: finite(p.trench_m, 0, 8000),
     seamount_m: finite(p.seamount_m, 0, 6000), erosion: bool(p.erosion), hydrology: bool(p.hydrology), climate: bool(p.climate),
-    detail_m: finite(p.detail_m, 0, 400) };
+    detail_m: finite(p.detail_m, 0, 400),
+    ...(p.hill_detail_m===undefined?{}:{hill_detail_m:finite(p.hill_detail_m,0,500)}),
+    ...(p.mountain_detail_m===undefined?{}:{mountain_detail_m:finite(p.mountain_detail_m,0,1600)}),
+    ...(p.rock_detail_m===undefined?{}:{rock_detail_m:finite(p.rock_detail_m,0,200)}) };
 }

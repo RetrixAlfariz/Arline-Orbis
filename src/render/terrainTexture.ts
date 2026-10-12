@@ -1,4 +1,5 @@
 import type { ElevationRaster } from '../terrain/sample';
+import { reliefShade } from './relief';
 
 export type AtlasStyle = 'natural' | 'survey';
 
@@ -49,16 +50,10 @@ export function terrainTexture(raster: ElevationRaster, options: {
       : wet ? elevationColor(Math.min(-1, relative - (options.bathymetry ? 0 : options.seaLevel)), style)
       : options.bathymetry && options.showWater ? (style === 'survey' ? [229, 225, 210] : [192, 188, 144])
       : elevationColor(Math.max(0, height - options.seaLevel), style);
-    const column = i % raster.width;
-    const row = Math.floor(i / raster.width);
-    const left = raster.samples[i - column + (column + raster.width - 1) % raster.width];
-    const right = raster.samples[i - column + (column + 1) % raster.width];
-    const north = raster.samples[Math.max(0, row - 1) * raster.width + column];
-    const south = raster.samples[Math.min(raster.height - 1, row + 1) * raster.width + column];
     // Display-only northwest relief. Never modify authoritative elevation samples.
     // Northwest-illuminated cartographic relief, display-only. Shadowed steep sides
     // remain readable on both sea floor and mountains; geometry is not modified.
-    const relief = Math.max(0.72, Math.min(1.18, 1 + (right - left + south - north) / 1950));
+    const relief = reliefShade(raster, i);
     image.data.set([Math.min(255, r * relief), Math.min(255, g * relief), Math.min(255, b * relief), 255], i * 4);
   }
   context.putImageData(image, 0, 0);
@@ -99,11 +94,13 @@ export function terrainTexture(raster: ElevationRaster, options: {
     context.strokeStyle = level === coast ? (options.style === 'survey' ? 'rgba(89, 101, 95, 0.8)' : 'rgba(233, 226, 182, 0.8)')
       : level < coast && options.showWater ? (options.style === 'survey' ? 'rgba(62, 102, 117, 0.35)' : 'rgba(212, 235, 226, 0.32)')
       : (options.style === 'survey' ? 'rgba(86, 77, 66, 0.3)' : 'rgba(91, 80, 58, 0.27)');
-    context.lineWidth = level === coast ? 2 : 0.5;
+    // Keep global contour widths stable at a shared angular view, including HD.
+    const contourScale = 'span_lon' in raster ? 1 : raster.width / 720;
+    context.lineWidth = (level === coast ? 2 : 0.5) * contourScale;
     context.stroke();
     if (level === coast) {
       context.strokeStyle = '#576d64';
-      context.lineWidth = 0.65;
+      context.lineWidth = 0.65 * contourScale;
       context.stroke();
     }
   }
