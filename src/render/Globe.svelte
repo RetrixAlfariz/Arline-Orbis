@@ -1,15 +1,17 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { Coordinate, Landmark } from '../core/world';
+  import type { MapFeature } from '../core/authoring';
   import type { ElevationRaster } from '../terrain/sample';
   import type { createGlobe } from './globe';
 
-  let { texture, raster, radius_m, selection, landmarks, onselect, onhover, onerror }: {
+  let { texture, raster, radius_m, selection, landmarks, features = [], onselect, onhover, onerror }: {
     texture: HTMLCanvasElement;
     raster: ElevationRaster;
     radius_m: number;
     selection: Coordinate | null;
     landmarks: Landmark[];
+    features?: MapFeature[];
     onselect: (point: Coordinate) => void;
     onhover: (point: Coordinate | null) => void;
     onerror: (message: string) => void;
@@ -35,6 +37,7 @@
   $effect(() => { controller?.update(selection, landmarks); });
   $effect(() => { controller?.setTexture(texture); });
   $effect(() => { controller?.setTerrain(raster, radius_m); });
+  $effect(() => { controller?.setFeatures(features); });
 </script>
 
 <div class="globe" bind:this={host}>

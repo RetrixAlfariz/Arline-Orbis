@@ -1,9 +1,13 @@
 <script lang="ts">
-  import { geoEquirectangular, geoGraticule, geoPath } from 'd3-geo';
+  import { geoGraticule, geoPath, geoCircle } from 'd3-geo';
+  import { makeProjection, projectPoint, invertPoint, reprojectTexture } from '../geo/projections';
+  import type { ProjectionKind } from '../geo/projections';
+  import type { MapFeature } from '../core/authoring';
+  import { featureGeometry } from '../core/authoring';
   import type { Coordinate, Landmark } from '../core/world';
   import { coordinate, fromUV, toUV } from '../geo/coordinates';
 
-  let { texture, selection, landmarks, showGrid, showLabels, worldName, sampleRegions, sculptMode, brushRadiusKm, planetRadius_m, onselect, onhover }: {
+  let { texture, selection, landmarks, showGrid, showLabels, worldName, sampleRegions, sculptMode, brushRadiusKm, planetRadius_m, projectionKind = 'equirectangular', projectionCenter = {lat_deg:0,lon_deg:0}, features = [], drawingVertices = [], rivers = [], measurementStart = null, onselect, onhover }: {
     texture: HTMLCanvasElement;
     selection: Coordinate | null;
     landmarks: Landmark[];
@@ -14,14 +18,22 @@
     sculptMode: boolean;
     brushRadiusKm: number;
     planetRadius_m: number;
+    projectionKind?: ProjectionKind;
+    projectionCenter?: Coordinate;
+    features?: MapFeature[];
+    drawingVertices?: Coordinate[];
+    rivers?: Coordinate[][];
+    measurementStart?: Coordinate | null;
     onselect: (point: Coordinate) => void;
     onhover: (point: Coordinate | null) => void;
   } = $props();
 
   const width = 1000;
   const height = 500;
-  const projection = geoEquirectangular().scale(width / (2 * Math.PI)).translate([width / 2, height / 2]);
-  const grid = geoPath(projection)(geoGraticule().step([30, 30])());
+  const projection = $derived(makeProjection(projectionKind, projectionCenter, width, height));
+  const path = $derived(geoPath(projection));
+  const grid = $derived(path(geoGraticule().step([30,30])()));
+  const locate = (p:Coordinate) => projectPoint(projection,projectionKind,projectionCenter,p);
   // Fictional sample annotations are view-only; they are not authored feature records.
   const regions = [
     { name: 'WESTERN REACH', lat_deg: 3, lon_deg: -73, ocean: false, angle: -14 },
@@ -31,7 +43,7 @@
     { name: 'Lantern Ridge', lat_deg: -27, lon_deg: 44, ocean: true, angle: -75 },
     { name: 'Veil Basin', lat_deg: -53, lon_deg: 67, ocean: true, angle: 0 },
   ];
-  const image = $derived(texture.toDataURL());
+  const image = $derived(reprojectTexture(texture, projection, projectionKind, projectionCenter));
   let surface: SVGSVGElement;
   let zoom = $state(1);
   let originX = $state(-25);
@@ -74,7 +86,7 @@
     if (!matrix) return null;
     const local = new DOMPoint(event.clientX, event.clientY).matrixTransform(matrix.inverse());
     if (local.x < 0 || local.x > width || local.y < 0 || local.y > height) return null;
-    return fromUV(local.x / width, local.y / height);
+    return invertPoint(projection, projectionKind, projectionCenter, local.x, local.y);
   }
 
   function key(event: KeyboardEvent) {
@@ -95,9 +107,18 @@
       onselect(current);
     }
   }
+  function exportAtlas(){
+    const copy=surface.cloneNode(true) as SVGSVGElement;
+    copy.setAttribute('xmlns','http://www.w3.org/2000/svg');copy.setAttribute('width','1600');copy.setAttribute('height','840');
+    const originals=surface.querySelectorAll('*'), clones=copy.querySelectorAll('*');
+    for(let i=0;i<originals.length;i++)for(const prop of ['fill','stroke','font-size','font-family','font-style','font-weight','letter-spacing','paint-order','stroke-width']){
+      const value=getComputedStyle(originals[i]).getPropertyValue(prop);if(value)(clones[i] as SVGElement).style.setProperty(prop,value);
+    }
+    const url=URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(copy)],{type:'image/svg+xml'}));const link=document.createElement('a');link.href=url;link.download='orbis-atlas.svg';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }
 </script>
 
-<div class="atlas-navigation" aria-label="Atlas navigation"><button aria-label="Zoom in atlas" disabled={zoom >= 8} onclick={() => magnify(1.5)}>+</button><button aria-label="Zoom out atlas" disabled={zoom <= 1} onclick={() => magnify(1 / 1.5)}>−</button><button aria-label="Reset atlas view" onclick={reset}>{zoom.toFixed(1)}×</button></div>
+<div class="atlas-navigation" aria-label="Atlas navigation"><button aria-label="Export atlas SVG" onclick={exportAtlas}>SVG</button><button aria-label="Zoom in atlas" disabled={zoom >= 8} onclick={() => magnify(1.5)}>+</button><button aria-label="Zoom out atlas" disabled={zoom <= 1} onclick={() => magnify(1 / 1.5)}>−</button><button aria-label="Reset atlas view" onclick={reset}>{zoom.toFixed(1)}×</button></div>
 
 <!-- Custom geographic widget: focus, Enter and arrow-key navigation are implemented above. -->
 <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
@@ -110,7 +131,7 @@
   <path d="M0,-25V525 M1000,-25V525 M-25,0H1025 M-25,500H1025" fill="none" stroke="#7f8e84" stroke-width="0.7" />
   <image href={image} width={width} height={height} preserveAspectRatio="none" />
   {#if showGrid}<path data-testid="atlas-grid" d={grid ?? ''} fill="none" stroke="#dce6dc" stroke-opacity="0.13" stroke-width="0.65" />{/if}
-  <g class="map-axis" pointer-events="none" aria-hidden="true">
+  {#if projectionKind === 'equirectangular'}<g class="map-axis" pointer-events="none" aria-hidden="true">
     {#each [-150, -120, -90, -60, -30, 0, 30, 60, 90, 120, 150] as longitude}
       <text x={(longitude + 180) / 360 * width} y="-10" text-anchor="middle">{Math.abs(longitude)}°{longitude === 0 ? '' : longitude < 0 ? 'W' : 'E'}</text>
     {/each}
@@ -121,14 +142,23 @@
     <text x="15" y="518">{worldName.toUpperCase()} · PLANETARY ATLAS</text>
     <text x="985" y="518" text-anchor="end">ELEVATIONS IN METERS</text>
   </g>
+  {/if}
   {#if showLabels && sampleRegions}<g data-testid="atlas-region-labels" pointer-events="none" aria-hidden="true">
     {#each regions as region}
-      {@const uv = toUV(region)}
-      <text transform={`translate(${uv.u * width},${uv.v * height}) rotate(${region.angle})`} text-anchor="middle" class:map-ocean-label={region.ocean} class:map-region-label={!region.ocean}>{region.name}</text>
+      {@const position = locate(region)}
+      {#if position}{@const uv = {u:position[0]/width,v:position[1]/height}}
+      <text transform={`translate(${uv.u * width},${uv.v * height}) rotate(${region.angle})`} text-anchor="middle" class:map-ocean-label={region.ocean} class:map-region-label={!region.ocean}>{region.name}</text>{/if}
     {/each}
   </g>{/if}
+  {#each rivers as river}<path d={path({type:'LineString',coordinates:river.map(p=>[p.lon_deg,p.lat_deg])})??''} fill="none" stroke="#306b91" stroke-width="1" pointer-events="none"/>{/each}
+  {#each features as feature (feature.id)}
+    <path data-testid="map-feature" d={path(featureGeometry(feature))??''} fill={['polygon','region'].includes(feature.kind)?feature.layer==='lake'?'#699daf88':'#b2784655':'none'} stroke={feature.layer==='lake'||feature.layer==='river'?'#367692':feature.locked?'#9b4439':'#6b5e49'} stroke-width={feature.kind==='point'?3:1.5} stroke-dasharray={feature.layer==='border'?'5 3':'none'}><title>{feature.name}</title></path>
+  {/each}
+  {#if drawingVertices.length}<path d={path(featureGeometry({kind:drawingVertices.length===1?'point':'line',coordinates:drawingVertices}))??''} fill="none" stroke="#c33c31" stroke-width="2" stroke-dasharray="4 3"/>{/if}
+  {#if measurementStart&&selection}<path d={path({type:'LineString',coordinates:[[measurementStart.lon_deg,measurementStart.lat_deg],[selection.lon_deg,selection.lat_deg]]})??''} stroke="#b14332" stroke-width="1.7" stroke-dasharray="6 3" fill="none" pointer-events="none"/>{/if}
   {#each landmarks as landmark (landmark.id)}
-    {@const uv = toUV(landmark.position)}
+    {@const position = locate(landmark.position)}
+    {#if position}{@const uv={u:position[0]/width,v:position[1]/height}}
     <g transform={`translate(${uv.u * width},${uv.v * height})`} role="button" tabindex="0"
       aria-label={`Select ${landmark.name}`}
       onclick={(event) => { event.stopPropagation(); onselect(landmark.position); }}
@@ -136,21 +166,19 @@
       <circle r="12" fill="transparent" />
       <circle r="4" fill="#f0bb73" stroke="#172d38" stroke-width="2" />
       <text x={uv.u > 0.8 ? -10 : 10} y="-9" text-anchor={uv.u > 0.8 ? 'end' : 'start'} class="map-label">{landmark.name}</text>
-    </g>
+    </g>{/if}
   {/each}
   {#if selection}
-    {@const uv = toUV(selection)}
+    {@const position = locate(selection)}
+    {#if position}{@const uv = {u:position[0]/width,v:position[1]/height}}
     {#if sculptMode}
-      {@const angularRadius = Math.min(Math.PI, brushRadiusKm * 1000 / planetRadius_m)}
-      <ellipse cx={uv.u * width} cy={uv.v * height}
-        rx={Math.min(500, angularRadius / (2 * Math.PI) * width / Math.max(0.08, Math.cos(selection.lat_deg * Math.PI / 180)))}
-        ry={angularRadius / Math.PI * height}
-        fill="#ad473d" fill-opacity=".1" stroke="#b7372e" stroke-width="1.8" stroke-dasharray="5 4" pointer-events="none"/>
+      <path d={path(geoCircle().center([selection.lon_deg,selection.lat_deg]).radius(Math.min(179,brushRadiusKm*1000/planetRadius_m*180/Math.PI))())??''} fill="#ad473d" fill-opacity=".1" stroke="#b7372e" stroke-width="1.8" stroke-dasharray="5 4" pointer-events="none"/>
     {/if}
     <g transform={`translate(${uv.u * width},${uv.v * height})`} pointer-events="none">
       <circle r="10" fill="none" stroke="#ffd198" stroke-width="2" />
       <circle r="2" fill="#ffd198" />
       <path d="M-16,0h5 M11,0h5 M0,-16v5 M0,11v5" stroke="#ffd198" stroke-width="1.5" />
     </g>
+    {/if}
   {/if}
 </svg>

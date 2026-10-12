@@ -21,7 +21,7 @@ export interface Planet {
   radius_m: number;
   sea_level_m: number;
   seed: string;
-  algorithm_version: 'm0-sample-v1' | 'm2-seeded-v1';
+  algorithm_version: 'm0-sample-v1' | 'm2-seeded-v1' | 'm4-plates-v1';
 }
 
 export const SAMPLE_PLANET: Planet = {
