@@ -3,6 +3,8 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { Coordinate, Landmark } from '../core/world';
 import { coordinate, fromVector, toVector } from '../geo/coordinates';
 import { sampleElevation } from '../terrain/sample';
+import { geoInterpolate } from 'd3-geo';
+import type { MapFeature } from '../core/authoring';
 import type { ElevationRaster } from '../terrain/sample';
 
 export function createGlobe(host: HTMLElement, textureCanvas: HTMLCanvasElement,
@@ -75,6 +77,8 @@ export function createGlobe(host: HTMLElement, textureCanvas: HTMLCanvasElement,
   gridGeometry.setAttribute('position', new THREE.Float32BufferAttribute(gridPoints, 3));
   const gridMaterial = new THREE.LineBasicMaterial({ color: '#a6c3b8', transparent: true, opacity: 0.19 });
   scene.add(new THREE.LineSegments(gridGeometry, gridMaterial));
+  const vectors = new THREE.Group(); scene.add(vectors);
+  const vectorMaterial = new THREE.LineBasicMaterial({ color: 0xb34b3b });
   const markers = new THREE.Group();
   scene.add(markers);
   const markerGeometry = new THREE.SphereGeometry(0.012, 12, 8);
@@ -163,9 +167,21 @@ export function createGlobe(host: HTMLElement, textureCanvas: HTMLCanvasElement,
     if (currentSelection) selectedMarker.position.set(...toVector(currentSelection, visualRadius(currentSelection) + 0.012));
   }
   return {
+    setFeatures(features: MapFeature[]) {
+      for (const object of [...vectors.children]) { (object as THREE.Line).geometry.dispose(); vectors.remove(object); }
+      for (const feature of features) {
+        const points: THREE.Vector3[] = [];
+        const vertices = ['polygon','region'].includes(feature.kind) ? [...feature.coordinates,feature.coordinates[0]] : feature.coordinates;
+        if (vertices.length === 1) { const p=vertices[0]; const q={lat_deg:Math.min(90,p.lat_deg+.2),lon_deg:p.lon_deg}; points.push(new THREE.Vector3(...toVector(p,visualRadius(p)+.005)),new THREE.Vector3(...toVector(q,visualRadius(q)+.005))); }
+        for (let i=1;i<vertices.length;i++) {const a=vertices[i-1],b=vertices[i],along=geoInterpolate([a.lon_deg,a.lat_deg],[b.lon_deg,b.lat_deg]);
+          for(let k=0;k<=16;k++){const [lon_deg,lat_deg]=along(k/16),p={lat_deg,lon_deg};points.push(new THREE.Vector3(...toVector(p,visualRadius(p)+.005)));}}
+        if (points.length) vectors.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points),vectorMaterial));
+      } draw();
+    },
     setTexture(canvas: HTMLCanvasElement) { texture.image = canvas; texture.needsUpdate = true; draw(); },
     setTerrain(raster: ElevationRaster, radius_m: number) {
       rebuildTerrain(raster, radius_m);
+      for (const marker of markers.children) { const p=marker.userData.position as Coordinate; marker.position.set(...toVector(p,visualRadius(p)+.008)); }
       if (currentSelection) updateMarkerPosition();
       draw();
     },
@@ -198,6 +214,7 @@ export function createGlobe(host: HTMLElement, textureCanvas: HTMLCanvasElement,
       canvas.removeEventListener('pointerleave', pointerleave);
       canvas.removeEventListener('pointercancel', pointercancel);
       canvas.removeEventListener('webglcontextlost', contextlost);
+      for (const object of vectors.children) (object as THREE.Line).geometry.dispose(); vectorMaterial.dispose();
       geometry.dispose(); material.dispose(); texture.dispose();
       gridGeometry.dispose(); gridMaterial.dispose();
       markerGeometry.dispose(); markerMaterial.dispose();

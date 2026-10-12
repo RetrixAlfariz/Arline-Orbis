@@ -531,3 +531,58 @@ summary { color: #363c39; font-size: 12px; font-weight: 600; }
 @media (prefers-reduced-motion: reduce) {
   button { transition: none !important; }
 }
+
+/* M2–M4 authoring workspaces. View-state tools remain distinct from saved canon. */
+textarea { width:100%; min-width:0; color:var(--text); background:#fffaf0; border:1px solid #c2b7a5; padding:9px; resize:vertical; font:12px ui-monospace,Consolas,monospace; }
+fieldset { border:0; padding:0; margin:0; min-width:0; }
+progress { width:100%; accent-color:#ac4436; }
+.workspace-tabs { display:flex; flex-wrap:wrap; align-items:center; gap:7px; margin-bottom:12px; border-bottom:1px solid #c4b9a7; padding-bottom:9px; }
+.workspace-tabs button { min-height:38px; border:0; border-bottom:2px solid transparent; background:transparent; color:#565e58; padding:7px 11px; }
+.workspace-tabs button.active { border-color:#a94335; color:#812f27; font-weight:650; }
+.workspace-tabs label { margin-left:auto; font-size:12px; display:flex; align-items:center; gap:8px; }
+.workspace-tabs select { width:auto; max-width:180px; }
+.map-toolbar > label { display:flex; gap:6px; align-items:center; font-size:11px; }
+.map-toolbar > label select { width:auto; max-width:155px; min-height:32px; padding:4px; font-size:11px; }
+.map-toolbar > button { border:1px solid #bbaa98; background:#f0e4d2; min-height:32px; font-size:11px; }
+.system-legend { font:10px ui-monospace,monospace; color:#535f59; text-align:center; max-width:100%; }
+.check-label { display:flex!important; gap:8px; align-items:flex-start; margin:10px 0!important; }
+.check-label input { width:17px; height:17px; min-height:17px; flex:0 0 17px; padding:0; accent-color:#a94335; margin:1px 0 0!important; }
+.authoring-panel .action-row > label { flex:1; min-width:0; }
+.authoring-panel textarea { margin-top:6px; }
+.authoring-panel details { margin-top:16px; }
+.authoring-panel select, .cave-form select { font-size:12px; }
+.generation-preview { background:#e8e6d9; border:1px solid #b9c1aa; padding:12px; margin-top:12px; font-size:12px; }
+.conflict-list { max-height:160px; overflow:auto; font:11px ui-monospace,monospace; border:1px solid #cabcaa; padding:7px; }
+.generation-panel fieldset:disabled { opacity:.6; }
+.subsurface-workbench, .region-workbench { background:#f5efe3; border:1px solid #bcb19d; padding:18px; min-width:0; }
+.subsurface-workbench > header, .region-workbench > header { display:flex; justify-content:space-between; gap:12px; align-items:center; margin-bottom:16px; }
+.subsurface-workbench h2, .region-workbench h2 { font:27px Georgia,serif; margin:0; }
+.subsurface-workbench header > span, .region-workbench header > span { font-size:11px; color:#687067; }
+.subsurface-layout { display:grid; grid-template-columns:minmax(0,1fr) 245px; gap:22px; }
+.cave-diagrams { min-width:0; }
+.cave-diagrams > svg { display:block; width:100%; border:1px solid #c5b8a4; margin:12px 0; }
+.cave-diagrams .map-toolbar { padding:0; background:transparent; gap:8px; }
+.cave-diagrams .map-toolbar .secondary { width:auto; font-size:11px; }
+.cave-diagrams .map-toolbar input[type=number] { width:92px; }
+.cave-form label { display:block; margin:12px 0 5px; font-size:12px; }
+.cave-form input, .cave-form select, .cave-form textarea { margin-top:5px; }
+.cave-form { border-left:1px solid #cfc3b1; padding-left:18px; }
+.cave-form p { font-size:12px; }
+.passage-row { display:flex; gap:6px; align-items:center; margin-top:10px; font-size:11px; }
+.passage-row button { border:1px solid #bbaa96; background:transparent; padding:5px; }
+.cave-scene { width:100%; height:320px; border:1px solid #b6b39b; margin-top:14px; }
+.cave-scene canvas { display:block; max-width:100%; touch-action:none; }
+.region-map { display:block; width:100%; image-rendering:auto; }
+.region-image-button { display:block; border:0; padding:0; width:100%; cursor:crosshair; }
+.region-placeholder { min-height:250px; display:grid; place-items:center; color:#6c6e62; }
+.region-workbench .map-toolbar { margin-bottom:12px; }
+@media(min-width:1101px) and (max-width:1600px) { .subsurface-layout { grid-template-columns:1fr; } .cave-form { border-left:0; padding:0; border-top:1px solid #c5b9a6; } }
+@media(max-width:760px) { .subsurface-layout { grid-template-columns:1fr; } .cave-form { border-left:0; padding:0; } .subsurface-workbench, .region-workbench { padding:12px; } .subsurface-workbench > header { flex-wrap:wrap; } }
+@media print {
+  .app-header,.places-panel,.inspector,.workspace-tabs,.map-toolbar,.atlas-navigation,.atlas-footer,.mode-switch { display:none!important; }
+  main { display:block; height:auto!important; } .workspace { padding:0; overflow:visible; }
+  .chart { height:75vh; border:0; box-shadow:none; } .viewport { break-inside:avoid; }
+}
+.offline-indicator { margin-left:auto; font:10px ui-monospace,monospace; color:#74766b; }
+.local-indicator { margin-left:0; }
+@media(max-width:900px){.offline-indicator{display:none;}}

@@ -1,10 +1,27 @@
 <script lang="ts">
+  import { readProjectFile, compressedProject } from '../core/portable';
   import { onMount } from 'svelte';
   import { createLandmark } from '../core/world';
   import type { Coordinate, Position } from '../core/world';
   import { coordinate, distanceKm } from '../geo/coordinates';
   import { newProject, decodeProject, anchorKey, waterDepth, MAX_PROJECT_BYTES } from '../core/project';
   import type { Project } from '../core/project';
+  import { authoringProject } from '../core/project';
+  import { visibleInEra, localWaterLevel } from '../core/authoring';
+  import type { MapFeature } from '../core/authoring';
+  import { lockedStrokeConflicts, regenerationConflicts } from '../authoring/conflicts';
+  import FeaturePanel from '../authoring/FeaturePanel.svelte';
+  import GenerationPanel from '../generation/GenerationPanel.svelte';
+  import SubsurfacePanel from '../subsurface/SubsurfacePanel.svelte';
+  import RegionalView from '../terrain/RegionalView.svelte';
+  import { startGeneration } from '../generation/client';
+  import type { WorldData, TerrainInput } from '../generation/pipeline';
+  import { DEFAULT_OPTIONS } from '../generation/options';
+  import { systemTexture, LAYER_LABELS } from '../render/systemTexture';
+  import type { SystemLayer } from '../render/systemTexture';
+  import type { ProjectionKind } from '../geo/projections';
+  import { LANDFORMS } from '../generation/plates';
+  import { BIOMES } from '../generation/hydrology';
   import { loadWorkspace, saveWorkspace } from '../core/storage';
   import type { Snapshot } from '../core/storage';
   import { generatePlanet, sampleElevation, SAMPLE_SITES } from '../terrain/sample';
@@ -16,11 +33,23 @@
 
   let project = $state<Project>(newProject());
   const planet = $derived(project.planet);
+  let systemsData = $state<WorldData | null>(null);
+  let systemsKey = $state('');
+  let systemsLoading = $state(false);
+  let systemsError = $state('');
+  let retryGeneration = $state(0);
+  const systemInput = $derived<TerrainInput>({planet:project.planet, strokes:project.terrain_strokes??[],
+    options:project.generation_options??{...DEFAULT_OPTIONS},
+    width:project.generation_options?.resolution??360,height:(project.generation_options?.resolution??360)/2+1});
+  const currentSystemKey = $derived(JSON.stringify(systemInput));
+  const fallbackRaster = {width:16,height:9,samples:new Int16Array(144)};
+
   // Selection and landmark edits must never re-run global terrain synthesis.
   // Cache by the *geographic* inputs only, not by a whole mutable Project reference.
   let cachedTerrainKey = '';
   let cachedTerrain: { raster: ReturnType<typeof generatePlanet>; ms: number } | undefined;
   const terrain = $derived.by(() => {
+    if (planet.algorithm_version === 'm4-plates-v1') return {raster:systemsData?.raster??fallbackRaster,ms:systemsData?.timings.total??0};
     const key = planet.algorithm_version + '|' + planet.seed + '|' + planet.radius_m +
       '|' + JSON.stringify(project.terrain_strokes ?? []);
     if (key === cachedTerrainKey && cachedTerrain) return cachedTerrain;
@@ -50,7 +79,9 @@
   let longitude = $state(-55);
   let notice = $state('');
   let ready = $state(false);
+  const canEdit = $derived(ready && (planet.algorithm_version !== 'm4-plates-v1' || systemsKey === currentSystemKey));
   let saveState = $state('Loading local world…');
+  let offlineState = $state('Local preview');
   let storageError = $state('');
   let revision = 0;
   let history = $state<Snapshot[]>([]);
@@ -71,6 +102,17 @@
   let worldSeed = $state('orbis-world-001');
   let worldRadius = $state(6371);
   let sculptMode = $state(false);
+  let pane = $state<'world' | 'underground' | 'region'>('world');
+  let projectionKind = $state<ProjectionKind>('equirectangular');
+  let projectionCenter = $state<Coordinate>({lat_deg:0,lon_deg:0});
+  let displayLayer = $state<SystemLayer>('relief');
+  let currentEra = $state('');
+  let drawingKind = $state<MapFeature['kind'] | null>(null);
+  let drawingVertices = $state<Coordinate[]>([]);
+  const visibleFeatures = $derived((project.features??[]).filter(f=>visibleInEra(f,currentEra||null)));
+  const hydroIndex = $derived(Math.min(raster.height-1,Math.round((90-project.selection.lat_deg)/180*(raster.height-1)))*raster.width + Math.min(raster.width-1,Math.floor((project.selection.lon_deg+180)/360*raster.width)));
+  const localSeaLevel = $derived(localWaterLevel(visibleFeatures,project.selection,groundElevation,
+    planet.algorithm_version==='m4-plates-v1' && Number.isFinite(systemsData?.hydro?.water_surface[hydroIndex]) ? systemsData!.hydro!.water_surface[hydroIndex] : planet.sea_level_m,currentEra||null));
   let brushRadius = $state(300);
   let brushDelta = $state(-800);
   const strokeCount = $derived(project.terrain_strokes?.length ?? 0);
@@ -96,12 +138,30 @@
     site.lat_deg === selection.lat_deg && site.lon_deg === selection.lon_deg) : undefined);
   const name = $derived(draft?.name ?? selectedLandmark?.name ?? '');
 
-  $effect(() => { if (ready) texture = terrainTexture(raster, { seaLevel: planet.sea_level_m, showWater, bathymetry, style: mapStyle }); });
+  $effect(() => {
+    if (ready) texture = displayLayer !== 'relief' && planet.algorithm_version === 'm4-plates-v1' && systemsData && systemsKey === currentSystemKey
+      ? systemTexture(systemsData,displayLayer)
+      : terrainTexture(raster, { seaLevel: planet.sea_level_m, showWater, bathymetry, style: mapStyle });
+  });
+  $effect(() => {
+    if (!ready || planet.algorithm_version !== 'm4-plates-v1') return;
+    const key=currentSystemKey; void retryGeneration;
+    if (systemsKey === key) return;
+    let active=true; systemsLoading=true; systemsError='';
+    const task=startGeneration(JSON.parse(key));
+    task.result.then(data=>{if(active){systemsData=data;systemsKey=key;systemsLoading=false;}}).catch(e=>{if(active){systemsError=(e as Error).message;systemsLoading=false;}});
+    return()=>{active=false;task.cancel();};
+  });
   $effect(() => { latitude = project.selection.lat_deg; longitude = project.selection.lon_deg; });
   $effect(() => { radiusKm = planet.radius_m / 1000; seaLevel = planet.sea_level_m; seed = planet.seed; });
   const copy = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
   onMount(() => {
     let active = true;
+    if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+      offlineState='Preparing offline app';
+      navigator.serviceWorker.register(new URL('sw.js',document.baseURI)).then(()=>navigator.serviceWorker.ready)
+        .then(()=>{if(active)offlineState='Offline ready';}).catch(()=>{if(active)offlineState='Offline cache unavailable';});
+    }
     (async () => {
       try {
         const saved = await loadWorkspace();
@@ -172,7 +232,7 @@
   }
 
   function select(point: Coordinate) {
-    if (!ready) return;
+    if (!canEdit) return;
     const next = { ...project, selection: coordinate(point.lat_deg, point.lon_deg) };
     if (!withinLimit(next)) return;
     project = next;
@@ -184,7 +244,7 @@
     try { select(coordinate(latitude, longitude)); } catch (cause) { error = (cause as Error).message; }
   }
   function saveLandmark() {
-    if (!ready || selectedLandmark?.locked) return;
+    if (!canEdit || selectedLandmark?.locked) return;
     try {
       if (!selectedLandmark && landmarks.length >= 1000) throw new Error('Maximum 1,000 landmarks per project.');
       if (!Number.isFinite(authoredElevation) || Math.abs(authoredElevation) > 20000) throw new Error('Elevation must be between −20,000 and +20,000 m.');
@@ -239,19 +299,19 @@
         selection: coordinate(0, 0), landmarks: [], drafts: [], terrain_strokes: [],
       };
       change(next, 'Created ' + title + '.');
-      mode = 'atlas'; sculptMode = false; measureStart = null;
+      mode = 'atlas'; sculptMode = false; measureStart = null; displayLayer='relief'; pane='world';currentEra='';stopDrawing();
     } catch (cause) { error = (cause as Error).message; }
   }
   function sculptAt(point: Coordinate) {
-    if (!ready || mode !== 'atlas') return;
+    if (!canEdit || mode !== 'atlas') return;
     try {
       const radius = Number(brushRadius), delta = Number(brushDelta);
       const stroke = validateTerrainStroke({ id: crypto.randomUUID(), ...point,
         radius_km: radius, delta_m: delta });
       if (strokeCount >= MAX_TERRAIN_STROKES) throw new Error('This project reached the 256-stroke limit. Undo or remove edits before adding more.');
-      const protectedPlace = landmarks.find(l => l.locked && strokeTouches(l.position, stroke, planet.radius_m));
-      if (protectedPlace) throw new Error('Brush overlaps locked landmark "' + protectedPlace.name + '". Unlock it or paint elsewhere.');
-      const next = decodeProject({ ...copy(project), version: 2,
+      const conflicts = lockedStrokeConflicts(project,stroke);
+      if (conflicts.length) throw new Error('Brush overlaps locked landmark or geometry: ' + conflicts.join(', ') + '. Unlock it or paint elsewhere.');
+      const next = decodeProject({ ...copy(project), version: project.version === 3 ? 3 : 2,
         selection: coordinate(point.lat_deg, point.lon_deg),
         terrain_strokes: [...(project.terrain_strokes ?? []), stroke] });
       change(next, (delta > 0 ? 'Raised' : 'Lowered') + ' terrain by up to ' + Math.abs(delta).toLocaleString() + ' m within ' + radius + ' km.');
@@ -259,18 +319,37 @@
   }
   function removeLastStroke() {
     if (!strokeCount) return;
+    const protectedNames=lockedStrokeConflicts(project,project.terrain_strokes!.at(-1)!);
+    if(protectedNames.length){error='Unlock affected geometry before removing this terrain stroke: '+protectedNames.join(', ');return;}
     change({ ...project, terrain_strokes: project.terrain_strokes!.slice(0, -1) }, 'Removed last terrain stroke.');
   }
   function selectOrSculpt(point: Coordinate) {
-    if (sculptMode && mode === 'atlas') sculptAt(point);
+    if (!canEdit) return;
+    if (drawingKind) { drawingVertices = drawingKind === 'point' ? [point] : [...drawingVertices,point]; select(point); }
+    else if (sculptMode && mode === 'atlas') sculptAt(point);
     else select(point);
   }
+  function applyGenerated(next:Project,data:WorldData) {
+    const key=JSON.stringify({planet:next.planet,strokes:next.terrain_strokes??[],options:next.generation_options??DEFAULT_OPTIONS,
+      width:next.generation_options?.resolution??360,height:(next.generation_options?.resolution??360)/2+1});
+    systemsData=data; systemsKey=key; systemsLoading=false; systemsError='';
+    change(decodeProject(next),'Applied reviewed planetary generation. Authored anchors preserved.');
+    displayLayer='relief'; pane='world';
+  }
+  function commitAuthoring(next:Project,label:string) { change(decodeProject(next),label); }
+  function startDrawing(kind:MapFeature['kind']) { drawingKind=kind;drawingVertices=[];sculptMode=false;pane='world';mode='atlas'; }
+  function stopDrawing() { drawingKind=null;drawingVertices=[]; }
+
   function changeMode(next: 'atlas' | 'globe') {
     if (next === 'globe') sculptMode = false;
     switchMode(next);
   }
   function applySettings() {
     try {
+      if (planet.algorithm_version === 'm4-plates-v1' && seed !== planet.seed) throw new Error('Use Planetary generation to preview and review a new geology seed.');
+      if ((seed !== planet.seed || radiusKm*1000 !== planet.radius_m || seaLevel !== planet.sea_level_m) &&
+          ((project.features??[]).some(f=>f.locked)||(project.caves?.nodes??[]).some(n=>n.locked)) &&
+          !window.confirm('World settings change surrounding terrain or scale. Authored coordinates and elevations stay fixed. Review and apply this change?')) return;
       const next = decodeProject({ ...copy(project), planet: { ...planet, seed, radius_m: radiusKm * 1000, sea_level_m: seaLevel } });
       change(next, 'World settings updated. Authored anchors preserved.');
     } catch (cause) { error = (cause as Error).message; }
@@ -291,11 +370,15 @@
     link.href = url; link.download = 'orbis-world.orbis.json'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
     notice = 'Project exported with authored landmarks, terrain edits, and world settings.';
   }
+  async function exportCompressed() {
+    try {const blob=await compressedProject(JSON.stringify(project));const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download='orbis-world.orbis';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);notice='Compressed project exported.';}
+    catch(e){error=(e as Error).message;}
+  }
   async function importProject(event: Event) {
     const input = event.currentTarget as HTMLInputElement; const file = input.files?.[0]; if (!file) return;
     try {
       if (file.size > MAX_PROJECT_BYTES) throw new Error('Project exceeds the 2 MB limit.');
-      const next = decodeProject(await file.text());
+      const next = decodeProject(await readProjectFile(file));
       change(next, 'Project imported. Previous world retained in recovery history.');
     } catch (cause) { error = `Import rejected: ${(cause as Error).message}`; }
     finally { input.value = ''; }
@@ -320,6 +403,7 @@
     <span>Orbis<small>by Arline</small></span>
   </div>
   <div class="project-path"><span>World atlas</span><span aria-hidden="true">/</span><strong>{planet.name}</strong>{#if isSampleWorld}<span class="sample-badge">Sample</span>{/if}</div>
+  <span class="offline-indicator" role="status">{offlineState}</span>
   <span class="local-indicator" role="status"><span class="status-dot"></span>{saveState}</span>
 </header>
 
@@ -356,7 +440,7 @@
       {:else}<div class="empty-places"><span aria-hidden="true">⌖</span><p>{search ? 'No matching landmarks.' : 'Your named places will appear here.'}</p><small>Select a position and add a landmark to begin.</small></div>{/each}
       {#if project.drafts.length}<details class="draft-list"><summary>Unfinished drafts ({project.drafts.length})</summary>{#each project.drafts as d}<button onclick={() => select(d)}><span>{d.name || 'Unnamed draft'}</span><small>{degrees(d)}</small></button>{/each}</details>{/if}
     </div>
-    <div class="project-actions"><button class="secondary" disabled={!ready} onclick={() => { saveState = 'Saving…'; pending = true; void flush(); }}>Save world</button><div class="action-row"><button disabled={!ready} onclick={exportProject}>Export</button><button disabled={!ready} onclick={() => importInput.click()}>Import</button></div><input hidden bind:this={importInput} type="file" accept=".json,application/json" aria-label="Import project file" onchange={importProject} /><button class="secondary" disabled={!history.length || !ready} onclick={undo}>Undo last edit</button>
+    <div class="project-actions"><button class="secondary" disabled={!ready} onclick={() => { saveState = 'Saving…'; pending = true; void flush(); }}>Save world</button><div class="action-row"><button disabled={!ready} onclick={exportProject}>Export</button><button disabled={!ready} onclick={() => importInput.click()}>Import</button></div><input hidden bind:this={importInput} type="file" accept=".json,.orbis,application/json,application/gzip" aria-label="Import project file" onchange={importProject} /><button class="secondary" disabled={!ready} onclick={exportCompressed}>Export compressed .orbis</button><button class="secondary" disabled={!history.length || !ready} onclick={undo}>Undo last edit</button>
       <details class="recovery-panel"><summary>Recovery history ({recoveryItems.length})</summary><label for="recovery">Choose a backup</label><select id="recovery" bind:value={recoveryIndex}><option value="">Choose…</option>{#each recoveryItems as item, i}<option value={String(i)}>{new Date(item.at).toLocaleString()} · {item.label}</option>{/each}</select><button class="secondary" disabled={recoveryIndex === ''} onclick={restore}>Restore backup</button></details>
     </div>
     <div class="library-footer"><span class="status-dot"></span><span>Local world · project v{project.version}</span></div>
@@ -369,11 +453,26 @@
         <button class:active={mode === 'globe'} aria-pressed={mode === 'globe'} onclick={() => changeMode('globe')}><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8"/><ellipse cx="10" cy="10" rx="3.5" ry="8"/><path d="M2 10h16"/></svg>3D Globe</button>
       </div>
     </div>
+    <nav class="workspace-tabs" aria-label="World workspace">
+      <button class:active={pane==='world'} onclick={()=>pane='world'}>Surface atlas</button>
+      <button class:active={pane==='underground'} disabled={!canEdit} onclick={()=>{pane='underground';stopDrawing();sculptMode=false;}}>Underground</button>
+      <button class:active={pane==='region'} disabled={!canEdit} onclick={()=>{pane='region';stopDrawing();sculptMode=false;}}>Regional detail</button>
+      {#if project.eras?.length}<label>Era<select aria-label="Visible story era" bind:value={currentEra}><option value="">All eras</option>{#each project.eras as e}<option value={e.id}>{e.name}</option>{/each}</select></label>{/if}
+    </nav>
+    {#if systemsLoading}<p role="status">Rebuilding geographic layers in background…</p>{/if}
+    {#if systemsError}<div role="alert" class="graphics-notice">{systemsError}<button onclick={()=>retryGeneration++}>Retry terrain generation</button></div>{/if}
     {#if graphicsError}<div class="graphics-notice" role="status">{graphicsError}</div>{/if}
     {#if storageError}<div class="graphics-notice" role="alert">{storageError}</div>{/if}
+    {#if pane==='underground'}
+      <SubsurfacePanel {project} {selection} {raster} era={currentEra||null} onchange={commitAuthoring} onselect={select}/>
+    {:else if pane==='region'}
+      <RegionalView {raster} selection={project.selection} seed={planet.seed} detail_m={project.generation_options?.detail_m??60} seaLevel={planet.sea_level_m} onselect={select}/>
+    {:else}
     <div class="chart">
       <div class="map-toolbar">
-        <span class="view-caption">{mode === 'atlas' ? 'Equirectangular projection' : 'Spherical view'}</span>
+        <span class="view-caption">{mode === 'atlas' ? 'Geographic projection' : 'Spherical view'}</span>
+        {#if mode === 'atlas'}<label class="projection-picker">Projection<select aria-label="Map projection" bind:value={projectionKind}><option value="equirectangular">Equirectangular</option><option value="equal-earth">Equal Earth</option><option value="orthographic">Orthographic</option><option value="regional">Azimuthal regional</option></select></label>{#if projectionKind==='orthographic'||projectionKind==='regional'}<button onclick={()=>projectionCenter={...project.selection}}>Center projection on selection</button>{/if}{/if}
+        {#if planet.algorithm_version==='m4-plates-v1'&&systemsData}<label>Layer<select aria-label="Geographic system layer" bind:value={displayLayer}><option value="relief">Surface relief</option><option value="plates">Tectonic plates</option><option value="landforms">Seafloor structures</option>{#if systemsData.options?.climate}<option value="temperature">Temperature</option><option value="rainfall">Rainfall</option><option value="biomes">Biomes</option>{/if}{#if systemsData.hydro}<option value="water">Lakes and basins</option>{/if}</select></label>{/if}
         <div class="map-options">{#if mode === 'atlas'}<label><input type="checkbox" bind:checked={showGrid} />Grid</label><label><input type="checkbox" bind:checked={showLabels} />Region labels</label>{/if}<label><input type="checkbox" bind:checked={showWater} />Water</label><label><input type="checkbox" bind:checked={bathymetry} />Bathymetry</label>
           <label class="atlas-style-label">Style <select aria-label="Atlas map style" bind:value={mapStyle}><option value="natural">Natural atlas</option><option value="survey">Survey sheet</option></select></label>
           {#if mode === 'atlas'}<button type="button" class="tool-toggle" class:active={sculptMode} aria-label={sculptMode ? 'Sculpt ON' : 'Sculpt terrain'} aria-pressed={sculptMode} onclick={() => sculptMode = !sculptMode}><span aria-hidden="true">✦ </span>{sculptMode ? 'Sculpt ON' : 'Sculpt terrain'}</button>{/if}
@@ -381,16 +480,17 @@
       </div>
       <div class="viewport" class:globe-mode={mode === 'globe'} class:sculpt-mode={sculptMode}>
         {#if texture}
-          {#if mode === 'atlas'}<Atlas {texture} {selection} {landmarks} {showGrid} {showLabels} worldName={planet.name} sampleRegions={isSampleWorld} sculptMode={sculptMode} brushRadiusKm={brushRadius} planetRadius_m={planet.radius_m} onselect={selectOrSculpt} onhover={(point) => hover = point} />
-          {:else}<Globe {texture} {raster} radius_m={planet.radius_m} {selection} {landmarks} onselect={select} onhover={(point) => hover = point} onerror={globeError} />{/if}
+          {#if mode === 'atlas'}<Atlas {texture} {selection} {landmarks} {showGrid} {showLabels} worldName={planet.name} sampleRegions={isSampleWorld} sculptMode={sculptMode} brushRadiusKm={brushRadius} planetRadius_m={planet.radius_m} projectionKind={projectionKind} projectionCenter={projectionCenter} features={visibleFeatures} drawingVertices={drawingVertices} rivers={planet.algorithm_version==='m4-plates-v1'?systemsData?.hydro?.rivers??[]:[]} measurementStart={measureStart} onselect={selectOrSculpt} onhover={(point) => hover = point} />
+          {:else}<Globe {texture} {raster} radius_m={planet.radius_m} {selection} {landmarks} features={visibleFeatures} onselect={select} onhover={(point) => hover = point} onerror={globeError} />{/if}
         {:else}<p class="loading" role="status">Preparing sample terrain…</p>{/if}
       </div>
       <div class="chart-bottom">
-        <p class="view-instruction">{sculptMode ? 'SCULPT ACTIVE · Click the map to apply one geographic brush stroke · Drag to pan · Undo to reverse' : mode === 'atlas' ? 'Click to inspect · Drag to pan · + / − to zoom · Arrow keys move selection' : 'Drag to rotate · Scroll to zoom · Click to inspect'}</p>
-        <div class="legend" aria-label={bathymetry && showWater ? 'Water depth legend' : showWater ? 'Sea-relative relief legend' : 'Exposed terrain legend'}><span>{!showWater ? 'Low terrain' : bathymetry ? '9,000+ m depth' : '−9,000 m from sea'}</span><div class="legend-ramp" class:bathymetry={bathymetry && showWater} class:exposed={!showWater}></div><span>{!showWater ? 'High terrain' : bathymetry ? '0 m · shore' : '+6,000 m from sea'}</span></div>
+        <p class="view-instruction">{drawingKind ? 'DRAWING '+drawingKind+' · Click vertices; save in Map features & lore' : sculptMode ? 'SCULPT ACTIVE · Click the map to apply one geographic brush stroke · Drag to pan · Undo to reverse' : mode === 'atlas' ? 'Click to inspect · Drag to pan · + / − to zoom · Arrow keys move selection' : 'Drag to rotate · Scroll to zoom · Click to inspect'}</p>
+        {#if displayLayer!=='relief'&&planet.algorithm_version==='m4-plates-v1'}<div class="system-legend" aria-label="Geographic layer legend">{LAYER_LABELS[displayLayer]}{#if displayLayer==='temperature'} · blue −40 °C → red +35 °C{:else if displayLayer==='rainfall'} · pale 0 → dark 3000 mm/year{:else if displayLayer==='biomes'} · {BIOMES.join(' / ')}{:else if displayLayer==='landforms'} · {LANDFORMS.join(' / ')}{:else if displayLayer==='plates'} · numbered plate regions, colors repeat after 8{:else} · blue: ocean · teal: inland water{/if}</div>{:else}<div class="legend" aria-label={bathymetry && showWater ? 'Water depth legend' : showWater ? 'Sea-relative relief legend' : 'Exposed terrain legend'}><span>{!showWater ? 'Low terrain' : bathymetry ? '9,000+ m depth' : '−9,000 m from sea'}</span><div class="legend-ramp" class:bathymetry={bathymetry && showWater} class:exposed={!showWater}></div><span>{!showWater ? 'High terrain' : bathymetry ? '0 m · shore' : '+6,000 m from sea'}</span></div>{/if}
       </div>
     </div>
     <div class="atlas-footer"><span class="pointer-readout">{hover ? degrees(hover) : 'Move over the map to read coordinates'}</span><span>Radius { (planet.radius_m / 1000).toLocaleString('en-US') } km</span></div>
+    {/if}
   </section>
 
   <aside class="inspector" aria-label="Position inspector">
@@ -398,7 +498,9 @@
     <div class="inspector-title"><p class="eyebrow">{selectedLandmark ? 'YOUR LANDMARK' : selectedSite ? 'SAMPLE LOCATION' : 'MAP POSITION'}</p><h2>{selectedLandmark?.name ?? selectedSite?.name ?? 'Selected position'}</h2><span class="record-classification">{groundElevation < planet.sea_level_m ? 'Ocean floor' : 'Land surface'}{selectedLandmark?.locked ? ' · Locked' : ''}</span></div>
     {#if selection}
       <div class="elevation-metric"><p class="section-label">{selectedLandmark ? 'Authored elevation' : groundElevation < planet.sea_level_m ? 'Seabed elevation' : 'Elevation'}</p><p data-testid="elevation">{elevation(selection.altitude_m)}</p><small>Relative to the fixed zero datum</small></div>
-      <dl class="water-details">{#if selectedLandmark}<div><dt>Terrain elevation</dt><dd data-testid="terrain-elevation">{elevation(groundElevation)}</dd></div>{/if}<div><dt>Sea level</dt><dd>{elevation(planet.sea_level_m)}</dd></div><div><dt>Water depth</dt><dd data-testid="water-depth">{waterDepth(groundElevation, planet.sea_level_m).toLocaleString('en-US')} m</dd></div></dl>
+      <dl class="water-details">{#if selectedLandmark}<div><dt>Terrain elevation</dt><dd data-testid="terrain-elevation">{elevation(groundElevation)}</dd></div>{/if}<div><dt>Sea level</dt><dd>{elevation(planet.sea_level_m)}</dd></div><div><dt>Water depth</dt><dd data-testid="water-depth">{waterDepth(groundElevation, localSeaLevel).toLocaleString('en-US')} m</dd></div></dl>
+      {#if localSeaLevel!==planet.sea_level_m}<p class="help-text">Local water surface: {elevation(localSeaLevel)}; separate from ocean sea level.</p>{/if}
+      {#if planet.algorithm_version==='m4-plates-v1'&&systemsData&&canEdit}<dl class="water-details"><div><dt>Plate</dt><dd>{systemsData.plates[hydroIndex]+1}</dd></div><div><dt>Landform</dt><dd>{LANDFORMS[systemsData.landforms[hydroIndex]]}</dd></div>{#if systemsData.options?.climate}<div><dt>Temperature</dt><dd>{systemsData.temperature[hydroIndex]?.toFixed(1)} °C</dd></div><div><dt>Rainfall</dt><dd>{systemsData.rainfall[hydroIndex]} mm/year</dd></div><div><dt>Biome</dt><dd>{BIOMES[systemsData.biome[hydroIndex]]}</dd></div>{/if}</dl>{/if}
       <dl class="position-details"><div><dt>Latitude</dt><dd data-testid="latitude">{selection.lat_deg.toFixed(4)}°</dd></div><div><dt>Longitude</dt><dd data-testid="longitude">{selection.lon_deg.toFixed(4)}°</dd></div></dl>
       <p class="observation-note">{selectedSite?.description ?? 'A geographic anchor for a place in your story.'}</p>
       <details class="inspector-tool terrain-editor" open={sculptMode}>
@@ -409,12 +511,12 @@
           <label>Height change (m)<input aria-label="Terrain height change (m)" type="number" min="-3000" max="3000" step="1" bind:value={brushDelta}/></label>
         </div>
         <p class="help-text">Positive raises land; negative carves basins or trenches. Locked landmarks cannot be painted over.</p>
-        <div class="action-row"><button type="button" disabled={!ready || mode !== 'atlas' || strokeCount >= MAX_TERRAIN_STROKES} onclick={() => sculptAt(project.selection)}>Apply at selection</button><button type="button" disabled={!strokeCount} onclick={removeLastStroke}>Remove last</button></div>
+        <div class="action-row"><button type="button" disabled={!canEdit || mode !== 'atlas' || strokeCount >= MAX_TERRAIN_STROKES} onclick={() => sculptAt(project.selection)}>Apply at selection</button><button type="button" disabled={!strokeCount} onclick={removeLastStroke}>Remove last</button></div>
       </details>
       <form class="landmark-form" onsubmit={(event) => { event.preventDefault(); saveLandmark(); }}>
-        <label for="landmark-name">Landmark name</label><input id="landmark-name" value={name} oninput={(e) => editDraft(e.currentTarget.value, authoredElevation)} disabled={!ready || selectedLandmark?.locked} maxlength="80" placeholder="Name this place…" required />
-        <label class="elevation-label" for="authored-elevation">Authored elevation (m)</label><input id="authored-elevation" type="number" value={authoredElevation} oninput={(e) => { if (e.currentTarget.value !== '') editDraft(name, e.currentTarget.valueAsNumber); }} disabled={!ready || selectedLandmark?.locked} min="-20000" max="20000" step="any" required />
-        <button class="primary" disabled={!ready || selectedLandmark?.locked} type="submit">{selectedLandmark ? 'Update landmark' : 'Set landmark'}<span aria-hidden="true">{selectedLandmark ? '✓' : '+'}</span></button>
+        <label for="landmark-name">Landmark name</label><input id="landmark-name" value={name} oninput={(e) => editDraft(e.currentTarget.value, authoredElevation)} disabled={!canEdit || selectedLandmark?.locked} maxlength="80" placeholder="Name this place…" required />
+        <label class="elevation-label" for="authored-elevation">Authored elevation (m)</label><input id="authored-elevation" type="number" value={authoredElevation} oninput={(e) => { if (e.currentTarget.value !== '') editDraft(name, e.currentTarget.valueAsNumber); }} disabled={!canEdit || selectedLandmark?.locked} min="-20000" max="20000" step="any" required />
+        <button class="primary" disabled={!canEdit || selectedLandmark?.locked} type="submit">{selectedLandmark ? 'Update landmark' : 'Set landmark'}<span aria-hidden="true">{selectedLandmark ? '✓' : '+'}</span></button>
       </form>
       {#if draft}<p class="draft-notice" role="status">Draft retained at this position. <button onclick={discardDraft}>Discard draft</button></p>{/if}
       {#if selectedLandmark}<div class="action-row landmark-actions"><button onclick={lockLandmark}>{selectedLandmark.locked ? 'Unlock landmark' : 'Lock landmark'}</button><button class="delete-action" disabled={selectedLandmark.locked} onclick={deleteLandmark}>Delete landmark</button></div>{/if}
@@ -442,6 +544,10 @@
       {/if}
       <button class="secondary" onclick={() => measureStart = null}>Clear measurement</button>{/if}</details>
     <details class="inspector-tool"><summary>World settings</summary><form onsubmit={(e) => { e.preventDefault(); applySettings(); }}><label>Planet radius (km)<input type="number" bind:value={radiusKm} min="1" max="1000000" step="any" required /></label><label>Sea level (m)<input type="number" bind:value={seaLevel} min="-20000" max="20000" step="any" required /></label><label>Terrain seed<input bind:value={seed} maxlength="100" required /></label><button class="secondary" disabled={!ready} type="submit">Apply world settings</button></form><p class="help-text">Changing the seed regenerates sample terrain. Authored coordinates and elevations stay fixed. Sea level changes wet areas and water depth.</p></details>
+    {#if canEdit}
+      <FeaturePanel {project} selection={project.selection} vertices={drawingVertices} drawing={drawingKind} onstart={startDrawing} onclear={stopDrawing} onchange={commitAuthoring} oninspect={select}/>
+      <GenerationPanel {project} {raster} onapply={applyGenerated}/>
+    {/if}
     <div class="inspector-foot">
       <p class="session-note"><span aria-hidden="true">◷</span>{storageError ? 'Local save needs attention. Export before closing.' : 'Autosave in this browser. Export a backup to keep a portable copy.'}</p>
       <details class="prototype-details"><summary>About this sample</summary><p>Fictional terrain for exploring Orbis, not a scientific simulation. Authored landmarks are independent of regenerated terrain.</p><p>One {raster.width} × {raster.height} elevation raster powers both views. Water depth is sea level minus submerged elevation; it is not cave depth. Authored landmark elevation changes the anchor, while terrain strokes change the actual elevation raster.</p><p>Generation: {generationMs.toFixed(1)} ms · raster: {(raster.samples.byteLength / 1024).toFixed(0)} KiB · {planet.algorithm_version}. The globe uses visually exaggerated terrain geometry; all inspector elevations are measured from original data.</p></details>
