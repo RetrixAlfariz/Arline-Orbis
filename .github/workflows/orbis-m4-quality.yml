@@ -1,0 +1,42 @@
+name: Orbis M4 quality verification
+on:
+  push:
+    branches: [feature/m0-m4-completion]
+    paths: [.github/workflows/orbis-m4-quality.yml]
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/m0-m4-completion
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Apply original checksum-verified quality fixes
+        run: |
+          python .orbis-fixes/apply.py
+          git rm -r .orbis-fixes
+          git rm .github/workflows/orbis-m4-quality.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix: harden offline cache, geographic lock boundaries and generation review'
+          git push origin HEAD:feature/m0-m4-completion
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+        env:
+          ORBIS_E2E_PREVIEW: '1'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: m0-m4-quality-evidence
+          path: test-results/
+          retention-days: 7
