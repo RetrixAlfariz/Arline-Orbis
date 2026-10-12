@@ -13,7 +13,7 @@ export function systemTexture(data:WorldData,layer:Exclude<SystemLayer,'relief'>
     else if(layer==='biomes')c=rgb(biomePalette[data.biome[i]]);
     else if(layer==='temperature'){const t=Math.max(0,Math.min(1,(data.temperature[i]+40)/75));c=[50+190*t,130+60*(1-Math.abs(2*t-1)),210-160*t];}
     else if(layer==='rainfall'){const r=Math.min(1,data.rainfall[i]/3000);c=[228-195*r,213-80*r,167+10*r];}
-    else c=data.hydro&&Number.isFinite(data.hydro.water_surface[i])?rgb(data.hydro.water_surface[i]>0?'#67b9c2':'#32597c'):rgb('#d3ccae');
+    else c=data.hydro&&Number.isFinite(data.hydro.water_surface[i])?rgb(data.hydro.parent[i]>=0?'#67b9c2':'#32597c'):rgb('#d3ccae');
     img.data[i*4]=c[0];img.data[i*4+1]=c[1];img.data[i*4+2]=c[2];img.data[i*4+3]=255;
   }
   ctx.putImageData(img,0,0);return canvas;

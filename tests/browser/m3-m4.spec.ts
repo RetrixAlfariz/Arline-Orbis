@@ -1,5 +1,6 @@
 import {test,expect} from '@playwright/test';
 import {readFile,writeFile} from 'node:fs/promises';
+import os from 'node:os';
 const saved=(page:import('@playwright/test').Page)=>expect(page.getByText('Saved locally',{exact:true})).toBeVisible();
 
 test('geographic features retain vertices, locks, lore and era across projections and export',async({page})=>{
@@ -26,6 +27,7 @@ test('geographic features retain vertices, locks, lore and era across projection
   const project=JSON.parse(await readFile((await(await download).path())!,'utf8'));
   expect(project.version).toBe(3);expect(project.features[0].coordinates).toEqual([{lat_deg:28,lon_deg:-58},{lat_deg:30,lon_deg:-55},{lat_deg:32,lon_deg:-52}]);
   expect(project.features[0].locked).toBe(true);expect(project.features[0].description).toContain('First Age');expect(project.features[0].era_id).toBe(project.eras[0].id);
+  await page.screenshot({path:'test-results/m4-features.png',fullPage:true});
   await saved(page);await page.reload();await expect(page.getByTestId('map-feature')).toHaveCount(1);
   const svg=page.waitForEvent('download');await page.getByRole('button',{name:'Export atlas SVG',exact:true}).click();
   expect((await svg).suggestedFilename()).toBe('orbis-atlas.svg');
@@ -52,6 +54,7 @@ test('underground authoring, depth slices, route, cave proposal, 3D and reload a
   await expect(page.getByTestId('cave-route')).toContainText('0 portals');
   await page.getByRole('button',{name:'Local 3D cave',exact:true}).click();await expect(page.locator('.cave-scene canvas')).toBeVisible();
   await page.screenshot({path:'test-results/m4-caves.png',fullPage:true});
+  await page.getByRole('button',{name:'Show section',exact:true}).click();await page.screenshot({path:'test-results/m4-section.png',fullPage:true});
   await saved(page);await page.reload();await page.getByRole('button',{name:'Underground',exact:true}).click();
   await page.getByLabel('Underground node',{exact:true}).selectOption({label:'Deep archive · locked'});
   await expect(page.getByTestId('cave-depth')).toHaveText('2500 m');
@@ -73,6 +76,7 @@ test('generation runs off-thread, is cancellable, and commits only a reviewed de
   await page.evaluate(()=>{(window as any).__beats=0;(window as any).__clock=setInterval(()=>{(window as any).__beats++;},20);});
   await page.getByRole('button',{name:'Preview generation',exact:true}).click();
   await expect(page.getByTestId('generation-preview')).toBeVisible({timeout:45000});
+  const generatorMs=Number(await page.getByTestId('generation-preview').getAttribute('data-generation-ms'));
   const beats=await page.evaluate(()=>{clearInterval((window as any).__clock);return (window as any).__beats;});expect(beats).toBeGreaterThan(2);
   await expect(page.getByTestId('elevation')).toHaveText(before);
   await page.getByRole('button',{name:'Apply generated world',exact:true}).click();
@@ -84,7 +88,7 @@ test('generation runs off-thread, is cancellable, and commits only a reviewed de
   const height=await page.getByTestId('elevation').innerText();
   await page.screenshot({path:'test-results/m4-planet.png',fullPage:true});
   await page.reload();await expect(page.getByLabel('Geographic system layer',{exact:true})).toBeVisible({timeout:30000});await expect(page.getByTestId('elevation')).toHaveText(height);
-  await writeFile('test-results/m4-worker-metrics.json',JSON.stringify({generationWorkflow_ms:Date.now()-start,heartbeat_ticks:beats,viewport:page.viewportSize(),note:'End-to-end preview/apply/export/screenshot/reload time, not pure generator latency.'},null,2));
+  await writeFile('test-results/m4-worker-metrics.json',JSON.stringify({generation_ms:generatorMs,generation_resolution:360,cpu:os.cpus()[0]?.model,logical_cpus:os.cpus().length,system_memory_gib:os.totalmem()/2**30,platform:os.platform(),node:process.version,browser:await page.context().browser()?.version(),generationWorkflow_ms:Date.now()-start,heartbeat_ticks:beats,viewport:page.viewportSize(),note:'End-to-end preview/apply/export/screenshot/reload time, not pure generator latency.'},null,2));
 });
 
 test('locked location conflicts require acknowledgement and preserve authored height',async({page})=>{
@@ -109,14 +113,36 @@ test('regional tiles refine on demand, cancel, and preserve the shared geographi
   await page.screenshot({path:'test-results/m4-region.png',fullPage:true});
 });
 
-test('production app reloads offline including lazy globe and compressed project round trip',async({page,context})=>{
+test('production app reloads offline including lazy globe and compressed project round trip',async({page,context},testInfo)=>{
+  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));page.on('requestfailed',r=>errors.push(r.url()+': '+r.failure()?.errorText));
+  try {
   test.setTimeout(60000);test.skip(!process.env.ORBIS_E2E_PREVIEW,'Service worker is production-only.');
   await page.goto('/');await expect(page.getByText('Offline ready',{exact:true})).toBeVisible({timeout:15000});
   await page.getByLabel('Landmark name',{exact:true}).fill('Offline station');await page.getByRole('button',{name:'Set landmark',exact:true}).click();await saved(page);
   const download=page.waitForEvent('download');await page.getByRole('button',{name:'Export compressed .orbis',exact:true}).click();
   const file=await(await download).path();expect(file).toBeTruthy();
+  await expect.poll(()=>page.evaluate(()=>!!navigator.serviceWorker.controller)).toBe(true);
   await context.setOffline(true);await page.reload();await expect(page.getByRole('heading',{name:'Offline station',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'3D Globe',exact:true}).click();await expect(page.locator('.globe canvas')).toBeVisible();
   await page.getByLabel('Import project file',{exact:true}).setInputFiles({name:'world.orbis',mimeType:'application/gzip',buffer:await readFile(file!)});
   await expect(page.getByRole('heading',{name:'Offline station',exact:true})).toBeVisible();await saved(page);
+  } finally {if(errors.length)await testInfo.attach('offline-failed-requests',{body:errors.join('\n'),contentType:'text/plain'});}
+});
+
+
+test('authored lake polygons have an independent level, lock and portable geometry',async({page})=>{
+  await page.goto('/');await page.getByText(/Map features & lore/).click();
+  await page.getByLabel('Feature name',{exact:true}).fill('Crown lake');
+  await page.getByLabel('Feature geometry',{exact:true}).selectOption('polygon');
+  await page.getByLabel('Feature layer',{exact:true}).selectOption('lake');
+  await page.getByLabel('Feature coordinates',{exact:true}).fill('29.8, -55.2\n30.2, -55.2\n30.2, -54.8\n29.8, -54.8');
+  await page.getByLabel('Lake surface altitude (m)',{exact:true}).fill('5500');
+  await page.getByRole('button',{name:'Save feature',exact:true}).click();
+  await expect(page.getByTestId('local-water-level')).toHaveText('+5,500 m');
+  await expect(page.getByTestId('water-depth')).toHaveText('198 m');
+  await page.getByRole('button',{name:'Lock feature',exact:true}).click();await saved(page);
+  await page.reload();await expect(page.getByTestId('local-water-level')).toHaveText('+5,500 m');
+  const download=page.waitForEvent('download');await page.getByRole('button',{name:'Export',exact:true}).click();
+  const p=JSON.parse(await readFile((await(await download).path())!,'utf8'));
+  expect(p.features[0].kind).toBe('polygon');expect(p.features[0].locked).toBe(true);expect(p.features[0].water_level_m).toBe(5500);
 });

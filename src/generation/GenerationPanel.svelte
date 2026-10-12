@@ -30,7 +30,8 @@
     if(!preview||!proposed)return;
     if(snapshot(project)!==fingerprint){error='The project changed during preview. Generate again before applying.';return;}
     if(conflicts.length&&!ack){error='Review the terrain changes at authored locations first.';return;}
-    onapply({...proposed,selection:project.selection,drafts:project.drafts},preview);preview=null;error='';stage='Applied without moving authored anchors.';
+    try{onapply({...proposed,selection:project.selection,drafts:project.drafts},preview);preview=null;error='';stage='Applied without moving authored anchors.';}
+    catch(e){error=(e as Error).message;}
   }
   onDestroy(()=>task?.cancel());
 </script>
@@ -54,7 +55,7 @@
     <button class="secondary" onclick={generate}>Preview generation</button>
   </fieldset>
   {#if busy}<div role="status">{stage} · {Math.round(pct)}%</div><progress max="100" value={pct}></progress><button class="secondary" onclick={()=>task?.cancel()}>Cancel generation</button>{/if}
-  {#if preview}<div class="generation-preview" data-testid="generation-preview">
+  {#if preview}<div class="generation-preview" data-testid="generation-preview" data-generation-ms={preview.timings.total} data-resolution={preview.raster.width}>
     <p>Preview ready · {preview.raster.width} × {preview.raster.height} · {Math.round(preview.timings.total)} ms</p>
     <p>{preview.plate_centers.length} plates · {preview.hydro?.rivers.length??0} river paths · {preview.hydro?.lake_count??0} lake basins</p>
     {#if conflicts.length}<p>{conflicts.length} authored anchor(s) have different surrounding terrain.</p><div class="conflict-list">{#each conflicts.slice(0,50) as c}<p>{c.locked?'🔒 ':''}{c.name}: {c.before_m} → {c.after_m} m</p>{/each}</div>

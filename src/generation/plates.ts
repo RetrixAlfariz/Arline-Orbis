@@ -43,31 +43,35 @@ export function makePlateModel(seed: string, options: GenerationOptions) {
   const hotspots=Array.from({length:10},()=>({center:direction(),radius:.012+rng()*.025,height:.5+rng()*.5}));
   function sample(at: Coordinate): Geology {
     const p=toVector(at); let a=plates[0],b=plates[1],da=-2,db=-2;
-    for(const plate of plates){const d=dot(p,plate.center);if(d>da){b=a;db=da;a=plate;da=d;}else if(d>db){b=plate;db=d;}}
+    let continent=plates.find(v=>v.continental)!,ocean=plates.find(v=>!v.continental)!,dc=-2,docean=-2;
+    for(const plate of plates){const d=dot(p,plate.center);if(d>da){b=a;db=da;a=plate;da=d;}else if(d>db){b=plate;db=d;}
+      if(plate.continental&&d>dc){continent=plate;dc=d;}else if(!plate.continental&&d>docean){ocean=plate;docean=d;}}
     const diff=sub(b.center,a.center), normal=unit(diff);
     const distance=Math.abs(Math.asin(clamp((da-db)/(Math.hypot(...diff)||1))));
     const relative=sub(cross(b.rotation,p),cross(a.rotation,p));
     const divergence=dot(relative,normal),shear=Math.abs(dot(relative,unit(cross(p,normal))));
     const broad=fractal(p,salt,3,4),fine=fractal(p,salt+71,24,3);
-    let elevation=a.continental?650+options.roughness*(1000*broad+350*fine):-4200-1000*Math.sqrt(a.age_ma/160)+options.roughness*300*fine;
-    let landform=a.continental?1:0;
-    // Smooth continental margins through a shelf into the adjoining oceanic plate.
-    if(a.continental!==b.continental){
-      const t=clamp(distance/.07,0,1),smooth=t*t*(3-2*t);
-      elevation= -180*(1-smooth)+elevation*smooth + options.roughness*100*fine;
-      if(distance<.025) landform=2;
-    }
+    // Crust material and shore geometry are continuous fields, not straight Voronoi
+    // polygon borders. Domain perturbation is deterministic and spherical at seams.
+    const materialDistance=Math.asin(clamp((dc-docean)/(Math.hypot(...sub(continent.center,ocean.center))||1)));
+    const coastline=materialDistance+options.roughness*(.20*fractal(p,salt+431,7,4)+.035*fine);
+    const blend=clamp((coastline+.028)/.066,0,1),continental=blend*blend*(3-2*blend);
+    const land=750+options.roughness*(1600*broad+420*fine);
+    const floor=-4200-1000*Math.sqrt(a.age_ma/160)+options.roughness*300*fine;
+    let elevation=floor*(1-continental)+land*continental;
+    let landform=continental>.8?1:continental>.12?2:0;
+    const dryCrust=continental>.85;
     const influence=Math.exp(-((distance/.05)**2));
-    if(divergence>.14 && !(a.continental&&b.continental)){
+    if(divergence>.14 && !dryCrust){
       elevation+=options.ridge_m*influence-options.rift_m*Math.exp(-((distance/.009)**2));
       if(distance<.05)landform=distance<.008?4:3;
     } else if(divergence<-.14){
-      if(a.continental){elevation+=4200*influence*(.7+.6*Math.abs(fine));}
+      if(dryCrust){elevation+=4200*influence*(.7+.6*Math.abs(fine));}
       else {elevation-=options.trench_m*Math.exp(-(((distance-.016)/.009)**2));elevation+=900*Math.exp(-(((distance-.07)/.018)**2));if(distance<.045)landform=5;}
     }else if(shear>.12){
       elevation-=500*influence*(.5+.5*Math.sin(dot(p,a.rotation)*120));if(distance<.02)landform=6;
     }
-    for(const h of hotspots){const d=1-dot(p,h.center),r=h.radius*h.radius; if(d<r*8 && !a.continental){elevation+=options.seamount_m*h.height*Math.exp(-d/r); if(d<r)landform=7;}}
+    for(const h of hotspots){const d=1-dot(p,h.center),r=h.radius*h.radius; if(d<r*8 && !dryCrust){elevation+=options.seamount_m*h.height*Math.exp(-d/r); if(d<r)landform=7;}}
     return {elevation_m:Math.round(clamp(elevation,-20000,20000)),plate:a.id,landform};
   }
   return {plates,salt,sample,plateCenters:plates.map(p=>({...fromVector(...p.center),id:p.id,continental:p.continental}))};

@@ -8,6 +8,7 @@ export function orbisOffline():Plugin {
     this.emitFile({type:'asset',fileName:'sw.js',source:`
 const CACHE='orbis-static-${version}';
 const FILES=${JSON.stringify(assets)}.map(p=>new URL(p,self.registration.scope).href);
+const OWNED=new Set(FILES);
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES))));
 self.addEventListener('activate',e=>e.waitUntil((async()=>{
   for(const key of await caches.keys())if(key.startsWith('orbis-static-')&&key!==CACHE)await caches.delete(key);
@@ -18,7 +19,11 @@ self.addEventListener('fetch',e=>{
   e.respondWith((async()=>{
     const c=await caches.open(CACHE);
     const url=e.request.mode==='navigate'?new URL('./index.html',self.registration.scope).href:e.request;
-    return await c.match(url)||fetch(e.request);
+    // Build assets are immutable public bytes. Vite's Vary: Origin must not
+    // distinguish the no-Origin precache fetch from a crossorigin module fetch.
+    // Never ignore Vary for arbitrary URLs or user-specific content.
+    const key=typeof url==='string'?url:url.url;
+    return (OWNED.has(key)?await c.match(key,{ignoreVary:true}):undefined)||fetch(e.request);
   })());
 });`});
     this.emitFile({type:'asset',fileName:'manifest.webmanifest',source:JSON.stringify({name:'Arline Orbis',short_name:'Orbis',start_url:'.',scope:'.',display:'standalone',background_color:'#e9e5db',theme_color:'#f5f0e6',icons:[{src:'orbis-icon.svg',sizes:'any',type:'image/svg+xml',purpose:'any'}]})});

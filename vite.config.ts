@@ -1,5 +1,5 @@
 import { defineConfig } from 'vitest/config';
-import { orbisOffline } from './scripts/offline-plugin';
+import { orbisOffline } from './scripts/offline-plugin.ts';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 
 export default defineConfig({

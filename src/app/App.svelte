@@ -160,7 +160,10 @@
     if (import.meta.env.PROD && 'serviceWorker' in navigator) {
       offlineState='Preparing offline app';
       navigator.serviceWorker.register(new URL('sw.js',document.baseURI)).then(()=>navigator.serviceWorker.ready)
-        .then(()=>{if(active)offlineState='Offline ready';}).catch(()=>{if(active)offlineState='Offline cache unavailable';});
+        .then(()=>new Promise<void>(resolve=>{
+          if(navigator.serviceWorker.controller){resolve();return;}
+          navigator.serviceWorker.addEventListener('controllerchange',()=>resolve(),{once:true});
+        })).then(()=>{if(active)offlineState='Offline ready';}).catch(()=>{if(active)offlineState='Offline cache unavailable';});
     }
     (async () => {
       try {
@@ -330,6 +333,8 @@
     else select(point);
   }
   function applyGenerated(next:Project,data:WorldData) {
+    // Validate before swapping either the terrain renderer or the saved project.
+    next=decodeProject(next);
     const key=JSON.stringify({planet:next.planet,strokes:next.terrain_strokes??[],options:next.generation_options??DEFAULT_OPTIONS,
       width:next.generation_options?.resolution??360,height:(next.generation_options?.resolution??360)/2+1});
     systemsData=data; systemsKey=key; systemsLoading=false; systemsError='';
@@ -380,6 +385,7 @@
       if (file.size > MAX_PROJECT_BYTES) throw new Error('Project exceeds the 2 MB limit.');
       const next = decodeProject(await readProjectFile(file));
       change(next, 'Project imported. Previous world retained in recovery history.');
+      currentEra='';displayLayer='relief';stopDrawing();
     } catch (cause) { error = `Import rejected: ${(cause as Error).message}`; }
     finally { input.value = ''; }
   }
@@ -495,10 +501,10 @@
 
   <aside class="inspector" aria-label="Position inspector">
     <div class="panel-heading"><h2>Inspector</h2><span class="inspector-symbol" aria-hidden="true">⌖</span></div>
-    <div class="inspector-title"><p class="eyebrow">{selectedLandmark ? 'YOUR LANDMARK' : selectedSite ? 'SAMPLE LOCATION' : 'MAP POSITION'}</p><h2>{selectedLandmark?.name ?? selectedSite?.name ?? 'Selected position'}</h2><span class="record-classification">{groundElevation < planet.sea_level_m ? 'Ocean floor' : 'Land surface'}{selectedLandmark?.locked ? ' · Locked' : ''}</span></div>
+    <div class="inspector-title"><p class="eyebrow">{selectedLandmark ? 'YOUR LANDMARK' : selectedSite ? 'SAMPLE LOCATION' : 'MAP POSITION'}</p><h2>{selectedLandmark?.name ?? selectedSite?.name ?? 'Selected position'}</h2><span class="record-classification">{groundElevation < localSeaLevel ? (localSeaLevel !== planet.sea_level_m ? 'Inland water bed' : 'Ocean floor') : 'Land surface'}{selectedLandmark?.locked ? ' · Locked' : ''}</span></div>
     {#if selection}
       <div class="elevation-metric"><p class="section-label">{selectedLandmark ? 'Authored elevation' : groundElevation < planet.sea_level_m ? 'Seabed elevation' : 'Elevation'}</p><p data-testid="elevation">{elevation(selection.altitude_m)}</p><small>Relative to the fixed zero datum</small></div>
-      <dl class="water-details">{#if selectedLandmark}<div><dt>Terrain elevation</dt><dd data-testid="terrain-elevation">{elevation(groundElevation)}</dd></div>{/if}<div><dt>Sea level</dt><dd>{elevation(planet.sea_level_m)}</dd></div><div><dt>Water depth</dt><dd data-testid="water-depth">{waterDepth(groundElevation, localSeaLevel).toLocaleString('en-US')} m</dd></div></dl>
+      <dl class="water-details">{#if selectedLandmark}<div><dt>Terrain elevation</dt><dd data-testid="terrain-elevation">{elevation(groundElevation)}</dd></div>{/if}<div><dt>Sea level</dt><dd>{elevation(planet.sea_level_m)}</dd></div>{#if localSeaLevel !== planet.sea_level_m}<div><dt>Local water surface</dt><dd data-testid="local-water-level">{elevation(localSeaLevel)}</dd></div>{/if}<div><dt>Water depth</dt><dd data-testid="water-depth">{waterDepth(groundElevation, localSeaLevel).toLocaleString('en-US')} m</dd></div></dl>
       {#if localSeaLevel!==planet.sea_level_m}<p class="help-text">Local water surface: {elevation(localSeaLevel)}; separate from ocean sea level.</p>{/if}
       {#if planet.algorithm_version==='m4-plates-v1'&&systemsData&&canEdit}<dl class="water-details"><div><dt>Plate</dt><dd>{systemsData.plates[hydroIndex]+1}</dd></div><div><dt>Landform</dt><dd>{LANDFORMS[systemsData.landforms[hydroIndex]]}</dd></div>{#if systemsData.options?.climate}<div><dt>Temperature</dt><dd>{systemsData.temperature[hydroIndex]?.toFixed(1)} °C</dd></div><div><dt>Rainfall</dt><dd>{systemsData.rainfall[hydroIndex]} mm/year</dd></div><div><dt>Biome</dt><dd>{BIOMES[systemsData.biome[hydroIndex]]}</dd></div>{/if}</dl>{/if}
       <dl class="position-details"><div><dt>Latitude</dt><dd data-testid="latitude">{selection.lat_deg.toFixed(4)}°</dd></div><div><dt>Longitude</dt><dd data-testid="longitude">{selection.lon_deg.toFixed(4)}°</dd></div></dl>

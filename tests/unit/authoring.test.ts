@@ -66,3 +66,13 @@ describe('M2/M3 authoring contracts',()=>{
     expect(changes).toHaveLength(2);expect(changes.find(c=>c.locked)?.after_m).toBe(900);expect(JSON.stringify(p)).toBe(before);
   });
 });
+
+it('protects a narrow brush against a long great-circle segment and locked passage',()=>{
+  const p=authoringProject(newProject());
+  p.features=[{...region,kind:'line',name:'Long protected boundary',coordinates:[{lat_deg:0,lon_deg:-80},{lat_deg:0,lon_deg:80}]}];
+  const narrow={id:'narrow',lat_deg:0.001,lon_deg:0.012345,radius_km:1,delta_m:-300};
+  expect(lockedStrokeConflicts(p,narrow)).toContain('Long protected boundary');
+  expect(lockedStrokeConflicts(p,{...narrow,lat_deg:2})).not.toContain('Long protected boundary');
+  p.features=[];p.caves={nodes:graph.nodes.map((n,i)=>({...n,locked:false,position:{...n.position,lat_deg:0,lon_deg:i?80:-80}})),edges:[{...graph.edges[0],kind:'tunnel',locked:true}]};
+  expect(lockedStrokeConflicts(p,narrow)).toContain('Shaft');
+});

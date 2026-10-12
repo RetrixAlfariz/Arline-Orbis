@@ -166,8 +166,9 @@ export function createGlobe(host: HTMLElement, textureCanvas: HTMLCanvasElement,
   function updateMarkerPosition() {
     if (currentSelection) selectedMarker.position.set(...toVector(currentSelection, visualRadius(currentSelection) + 0.012));
   }
-  return {
-    setFeatures(features: MapFeature[]) {
+  let activeFeatures: MapFeature[]=[];
+  function rebuildFeatures(features: MapFeature[]) {
+      activeFeatures=features;
       for (const object of [...vectors.children]) { (object as THREE.Line).geometry.dispose(); vectors.remove(object); }
       for (const feature of features) {
         const points: THREE.Vector3[] = [];
@@ -177,10 +178,13 @@ export function createGlobe(host: HTMLElement, textureCanvas: HTMLCanvasElement,
           for(let k=0;k<=16;k++){const [lon_deg,lat_deg]=along(k/16),p={lat_deg,lon_deg};points.push(new THREE.Vector3(...toVector(p,visualRadius(p)+.005)));}}
         if (points.length) vectors.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points),vectorMaterial));
       } draw();
-    },
+  }
+  return {
+    setFeatures: rebuildFeatures,
     setTexture(canvas: HTMLCanvasElement) { texture.image = canvas; texture.needsUpdate = true; draw(); },
     setTerrain(raster: ElevationRaster, radius_m: number) {
       rebuildTerrain(raster, radius_m);
+      rebuildFeatures(activeFeatures);
       for (const marker of markers.children) { const p=marker.userData.position as Coordinate; marker.position.set(...toVector(p,visualRadius(p)+.008)); }
       if (currentSelection) updateMarkerPosition();
       draw();
