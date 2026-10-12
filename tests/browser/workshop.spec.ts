@@ -58,8 +58,12 @@ test('final regional generation preserves the legacy base and round trips versio
   const originalTerrain=await page.getByTestId('elevation').innerText();
   await page.getByRole('button',{name:'Sculpt terrain',exact:true}).click();
   await page.getByRole('button',{name:'Apply at selection',exact:true}).click();
+  // Edit controls are enabled only when the worker result matches the current
+  // geographic inputs; persistence alone does not mean the raster rebuild is done.
+  await expect(page.getByRole('button',{name:'Apply at selection',exact:true})).toBeEnabled({timeout:30000});
   await expect(page.getByTestId('elevation')).not.toHaveText(originalTerrain);
   await page.getByRole('button',{name:'Remove last',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Apply at selection',exact:true})).toBeEnabled({timeout:30000});
   await expect(page.getByTestId('elevation')).toHaveText(originalTerrain);
   await page.getByRole('button',{name:'Sculpt ON',exact:true}).click();
   const pending=page.waitForEvent('download');await page.getByRole('button',{name:'Export',exact:true}).click();

@@ -39,4 +39,4 @@ Tests cover same-seed repeatability, shared-coordinate Standard/High equality (2
 
 The original math was not blurred or silently modified. Switching a legacy world to M5 deliberately changes surrounding terrain and requires the existing conflict review/acknowledgement while retaining authored coordinates, elevations, geometry and locks. River routing remains the existing pipeline; it was not redesigned.
 
-All work remains local on `design/reference-studio`; no push, merge, deployment or publication was performed. Native Library upload remains blocked by the delegated runtime's helper capabilities/authentication, as recorded in the studio delivery report.
+The implementation was subsequently published to `main` with explicit user authorization; GitHub Actions records its remote verification. No independent deployment is part of this change. Native Library upload remained blocked during artifact delivery, as recorded in the studio report.

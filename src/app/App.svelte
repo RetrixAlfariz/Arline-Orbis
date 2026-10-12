@@ -30,6 +30,7 @@
   import { applyTerrainStrokes, validateTerrainStroke, strokeTouches, MAX_TERRAIN_STROKES } from '../terrain/sculpt';
   import { elevationProfile } from '../geo/profile';
   import { terrainTexture } from '../render/terrainTexture';
+  import { TextureCache } from '../render/textureCache';
   import Atlas from '../render/Atlas.svelte';
   import Globe from '../render/Globe.svelte';
   import FieldworkBar from './FieldworkBar.svelte';
@@ -81,6 +82,7 @@
   const groundElevation = $derived(sampleElevation(raster, project.selection));
   const generationMs = $derived(terrain.ms);
   let texture = $state<HTMLCanvasElement | null>(null);
+  const displayTextureCache = new TextureCache();
   let mode = $state<'atlas' | 'globe'>('atlas');
   let showGrid = $state(true);
   let showLabels = $state(true);
@@ -217,9 +219,14 @@
     if((['temperature','rainfall','biomes'].includes(displayLayer)&&!systemsData.options?.climate)||(displayLayer==='water'&&!systemsData.hydro)||(['plates','landforms'].includes(displayLayer)&&!systemsData.plate_centers.length))displayLayer='relief';
   }});
   $effect(() => {
-    if (ready) texture = displayLayer !== 'relief' && workerTerrain && systemsData && systemsKey === currentSystemKey
-      ? systemTexture(systemsData,displayLayer)
-      : terrainTexture(raster, { seaLevel: planet.sea_level_m, showWater, bathymetry, style: mapStyle });
+    if (!ready) return;
+    if (displayLayer !== 'relief' && workerTerrain && systemsData && systemsKey === currentSystemKey) {
+      const data=systemsData,layer=displayLayer;
+      texture=displayTextureCache.get(data,'system:'+layer,()=>systemTexture(data,layer));
+    } else {
+      const data=raster,options={seaLevel:planet.sea_level_m,showWater,bathymetry,style:mapStyle};
+      texture=displayTextureCache.get(data,'relief:'+JSON.stringify(options),()=>terrainTexture(data,options));
+    }
   });
   $effect(() => {
     if (!ready || !workerTerrain) return;
@@ -441,6 +448,12 @@
     next=decodeProject(next);
     const key=JSON.stringify(terrainInput(next));
     systemsData=data; systemsKey=key; systemsLoading=false; systemsError='';
+    // A reviewed relief preview already rendered these exact samples. Reuse it
+    // only when the saved viewport's appearance matches the preview's settings.
+    if(workshopPreview?.final&&workshopPreview.data===data&&workshopPreview.layer==='relief'&&showWater&&!bathymetry&&mapStyle==='natural') {
+      const options={seaLevel:next.planet.sea_level_m,showWater,bathymetry,style:mapStyle};
+      displayTextureCache.prime(systemsData.raster,'relief:'+JSON.stringify(options),workshopPreview.texture);
+    }
     change(decodeProject(next),'Applied reviewed planetary generation. Authored anchors preserved.');
     displayLayer='relief'; pane='world';
   }

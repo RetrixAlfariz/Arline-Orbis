@@ -11,6 +11,7 @@
   import { RECIPES, candidateSeeds } from './recipes';
   import { projectFingerprint, proposedWorld, type WorkshopView } from './workshop';
   import { terrainTexture } from '../render/terrainTexture';
+  import { TextureCache } from '../render/textureCache';
   import { systemTexture, LAYER_LABELS, type SystemLayer } from '../render/systemTexture';
   import { regenerationConflicts } from '../authoring/conflicts';
   import { M5_NOISE_DEFAULTS } from './continuous';
@@ -31,6 +32,7 @@
   let generationId=0,regionId=crypto.randomUUID(),task:GenerationTask|undefined,autoTimer:ReturnType<typeof setTimeout>|undefined;
   let busy=$state(false),progress=$state(''),pct=$state(0),error=$state(''),ack=$state(false),memory=$state(0);
   let lastWorld='',suspended=false;
+  const previewTextureCache=new TextureCache();
   const fingerprint=$derived(projectFingerprint(project));
   const settings=$derived(JSON.stringify({options,seed,sea,scope,radius,center,removed,algorithm}));
   const recipe=$derived(RECIPES.find(r=>JSON.stringify(r.options)===JSON.stringify(options)&&r.sea_level_m===sea)?.name??'Custom');
@@ -64,12 +66,12 @@
   $effect(()=>{onregion(visible&&scope==='region'?{center:{...center},radius_km:radius}:null);});
   $effect(()=>{
     const frameData=data,region=scope==='region'?{center:{...center},radius_km:radius}:null;
-    if(!visible){onpreview(null);return;}
-    if(!frameData){onpreview(null);return;}
+    if(!visible){previewTextureCache.clear();onpreview(null);return;}
+    if(!frameData){previewTextureCache.clear();onpreview(null);return;}
     const planet=(finalProject??selectedCandidate?.proposed)?.planet??{...project.planet,sea_level_m:sea};
     const actualLayer=currentFrame?.skipped?'relief':layer;
     onpreview({data:frameData,planet,selection,layer:actualLayer,
-      texture:actualLayer==='relief'?terrainTexture(frameData.raster,{seaLevel:planet.sea_level_m,showWater:true,bathymetry:false,style:'natural'}):systemTexture(frameData,actualLayer),
+      texture:previewTextureCache.get(frameData,actualLayer+'|'+planet.sea_level_m,()=>actualLayer==='relief'?terrainTexture(frameData.raster,{seaLevel:planet.sea_level_m,showWater:true,bathymetry:false,style:'natural'}):systemTexture(frameData,actualLayer)),
       label:STAGE_LABELS[stage]+(currentFrame?.skipped?' · Skipped':''),final:stage==='review'&&validFinal,region});
   });
   function cancel(){if(autoTimer){clearTimeout(autoTimer);autoTimer=undefined;}generationId++;task?.cancel();task=undefined;busy=false;}

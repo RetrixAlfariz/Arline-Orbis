@@ -26,9 +26,19 @@ test('M5 detail controls review and apply explicitly, preserve locks, and replay
   expect(saved.planet.algorithm_version).toBe('m5-continuous-v1');
   expect(saved.generation_options).toMatchObject({resolution:1440,hill_detail_m:150,mountain_detail_m:1200,rock_detail_m:100});
   expect(saved.landmarks[0]).toMatchObject({locked:true,position:{lat_deg:30,lon_deg:-55,altitude_m:4800}});
+  await expect(page.getByText('Saved locally',{exact:true})).toBeVisible();
   await page.reload();await expect(page.getByLabel('Geographic system layer',{exact:true})).toBeVisible({timeout:30000});
   await expect(page.getByTestId('elevation')).toHaveText('+4,800 m');
+  await page.evaluate(()=>{
+    (window as any).__fullTextureWrites=0;
+    const draw=CanvasRenderingContext2D.prototype.putImageData;
+    CanvasRenderingContext2D.prototype.putImageData=(function(this:CanvasRenderingContext2D,...args:unknown[]){
+      if(this.canvas.width===1440&&this.canvas.height===721)(window as any).__fullTextureWrites++;
+      return Reflect.apply(draw,this,args);
+    }) as typeof draw;
+  });
   await page.getByLabel('Import project file').setInputFiles({name:'continuous.orbis.json',mimeType:'application/json',buffer:Buffer.from(raw)});
   await expect(page.getByRole('button',{name:'Unlock landmark',exact:true})).toBeVisible();
   await expect(page.getByTestId('elevation')).toHaveText('+4,800 m');
+  expect(await page.evaluate(()=>(window as any).__fullTextureWrites)).toBe(0);
 });

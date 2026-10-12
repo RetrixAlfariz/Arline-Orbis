@@ -38,6 +38,6 @@ Initial HD investigation: [before rendering normalization](hd-before.png), [afte
 
 The actual reference files resolved as `image(20261012-160737).png` and `image(20261012-160738).png`. They were materialized with the current unchanged Library transfer helper using installed WSL because Windows Python does not expose filesystem xattrs; original files and Library identity remain together in WSL. Both reference images were inspected directly before design changes.
 
-No remote push, merge, deploy or publication was performed.
+The implementation was subsequently published to `main` with explicit user authorization. Git history and GitHub Actions record publication and CI verification. No independent deployment is part of this change.
 
 Library attachment delivery is blocked in this delegated runtime: the required unchanged batch upload helper's hosted-app discovery returned HTTP 401 in WSL; native Windows discovery then reported `Library prepare_uploads is not available`. Both failed before preparing any upload sessions. No confirmed Library file IDs exist. The skill forbids calling prepare/finalize separately or changing a started helper flow to direct writes; no unsupported upload workaround was used.
