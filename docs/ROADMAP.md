@@ -1,120 +1,64 @@
 # Roadmap and engineering acceptance
 
-**Status:** M0 and M1 implemented and locally verified through 2026-10-12; M2 onward remains planned. This roadmap is a sequence of achievable increments, not a promise of dates. See [M1 evidence and limitations](M1.md) and the original [M0 report](M0.md).
+**Status, 2026-10-12:** M0–M4 standalone functionality is implemented in the bounded story-oriented scope below. The [acceptance report](M0_M4_COMPLETION.md) maps issues to code, tests, performance evidence and known limitations. Existing M0/M1 and early M2 behavior is retained. M5 and Arline Studio integration are not part of this completion.
 
-## M0 — Foundation and clickable prototype [P0]
+## M0: foundation and clickable prototype [P0]
 
-**Implemented.** Local development and production browser checks pass. The original M0 used session landmarks; M1 now persists them. Scientific terrain generation remains outside this milestone.
+**Implemented, regressions retained.** Svelte/TypeScript/Vite atlas, original seeded Aurelia with land/ridge/trench, inspector, shared geographic coordinates and 2D/globe selection.
 
-**Goal:** get a working editor rather than a huge framework of placeholders.
+Acceptance: local development/build works without an external service; landmarks have consistent positions between views; refresh and non-WebGL fallback work; illustrative geography is not described as scientific simulation.
 
-Deliver:
-- Minimal Svelte/Vite/TypeScript project with tests and reproducible run instructions.
-- Sample seeded planet dataset: visible land, coastline, undersea ridge and trench.
-- Responsive two-panel interface (atlas + inspector), coordinates on pointer/selection.
-- 2D equirectangular view; toggle to a rotatable 3D globe using same source.
-- Select a position, set/name a landmark, inspect elevation.
+Historical evidence: [M0](M0.md).
 
-Accept when:
-- Local dev and production build work; no required external service.
-- The same landmark is found at the same coordinate in both modes.
-- Browser refresh does not throw; non-WebGL view still works.
-- Documentation distinguishes prototype terrain from scientific simulation.
+## M1: geometry, sea depth, safety and portability [P0]
 
-## M1 — Geometry, sea depth, safety and portability [P0]
+**Implemented, regressions retained and extended.** Radius/geodesic distance, antimeridian/poles, signed seabed vs water depth, terrain/bathymetry modes, stable authored landmarks, locks, autosave, undo/recovery, stale-tab protection and portable import/export.
 
-**Implemented locally.** Save/reopen, portable round-trip, locks, bounded recovery, radius/distance tools, sea-level/depth semantics and shared bathymetry views are available. See [M1](M1.md) for tests, measured performance and validation limits.
+Acceptance: elevation signs/depth semantics remain correct; imports and reopen retain IDs, positions and locks; errors do not silently destroy the active project. Production offline caching and bounded compressed interchange now supplement the original local workflow.
 
-Deliver:
-- Radius/scale editing, kilometer geodesic distance tool, correct dateline/pole handling.
-- Separate seabed elevation, wet-area water depth and sea-level state.
-- Bathymetry visualization with water visibility toggle, legends and inspection.
-- Author-owned location edits, locks, save/load, import/export, migration/version checks.
-- Undo or recoverable edit history sufficient to protect author-entered data.
-- Automated tests on units, seams, numeric depth and round-trip.
+Historical evidence: [M1](M1.md).
 
-Accept when:
-- A selected ridge, trench and surface mountain preserve their elevation signs.
-- Water depth and cave depth aren't conflated.
-- Exporting/reopening retains landmark IDs, coordinates and locks.
-- No silent loss of authored information from regenerating prototype terrain.
-- Measured baseline memory/interactive performance is reported.
+## M2: authoring and regional cartography [P1]
 
-**M0+M1 = first useful Orbis MVP.** Stop and review usability before increasing scope.
+**Implemented in current bounded scope.** Point/line/polygon/region/lake authoring, lore and era fields, reversible terrain/bathymetry strokes, geographic lock protection, preview conflict review, four projections, measured cross-sections, SVG map export and progressive regional tiles.
 
-## M2 — Authoring and regional cartography [P1]
+Acceptance: geographic records remain fixed under projection changes; locked places cannot be overwritten silently; unused regions do not allocate maximum detail. Regional tiles use an 8 MiB LRU cache and progressive 33/65/129 grids.
 
-**Incremental progress:** initial standalone world creation, geodesic elevation brushes, measured elevation cross-sections, globe geometry relief, and original Natural/Survey atlas palettes are implemented in [M2](M2.md). More complete point/line/polygon tools, regional tile detail and projections remain on the roadmap.
+Boundaries: simple spherical polygons, no holes/multipolygons; regional residual detail is a visualization, not a whole-planet cube-sphere renderer or sub-raster authoring store. See [completion details](M0_M4_COMPLETION.md#regional-detail). The [initial M2 report](M2.md) is historical.
 
+## M3: underground and narrative extension [P1]
 
+**Implemented.** Sparse entrance/chamber/settlement nodes, tunnel/shaft/portal links, stable IDs, altitude/depth inspection, separate flood levels, depth slices, network sections, shortest routes, locks, local lore and era scopes. Deterministic cave suggestions require explicit acceptance; local 3D is on demand.
+
+Acceptance: precise below-ground depth and surface anchor relationships; persistent entrance/passage IDs; geographic records survive style/projection changes; no global voxel allocation or external service.
+
+Boundaries: 3D chamber envelopes/passages rather than walkable interiors; a network section is not a straight geological transect. Story references are local strings, and eras filter visibility rather than implementing full semantic branches/history simulation.
+
+## M4: procedural planetary systems [P2]
+
+**Implemented as parameterized heuristic authoring.** Seeded spherical plates/crust regions, continuous continental material field, ocean basins/age-related depths, ridges/rifts/trenches/transform scars/seamounts, optional erosion/sediment, priority-flood drainage/lakes/rivers and climate/biomes.
+
+Generation runs in a worker with stage progress, real cancellation, reviewable preview and explicit apply. Imported M4 recipes reconstruct in a worker. Array results reproduce from version, seed, options, resolution and authored strokes. Existing canonical records are retained; changing ground beneath them requires review.
+
+Acceptance evidence: deterministic and hydrological invariant tests, disabled-stage tests, browser cancellation and main-thread heartbeat, reviewed conflicts, cache/edge consistency and documented CPU/worker benchmarks. Low-detail generation is measured on a 4-vCPU hosted runner; broad low-end-device/hardware-GPU validation is not claimed.
+
+Boundaries: no professional tectonic reconstruction, calibrated erosion/climate, tides/currents, fluid dynamics or infinitely detailed planet. See [model limitations](M0_M4_COMPLETION.md#planetary-generation).
+
+## M5: standalone hardening, optimization and distribution [P2, not implemented by this delivery]
 
 Deliver:
-- Geographic point/line/polygon brushes with undo and selected-feature inspector.
-- Terrain/bathymetry authoring with regeneration conflict preview.
-- Regional detail layers, tile cache and automatic LOD where profiling requires it.
-- Optional additional projections: Equal Earth, orthographic and regional.
-- Surface-to-seafloor cross-sections and print/export atlas views.
+- Broader real-device CPU/GPU/memory measurements, low-detail tuning, Firefox/Safari testing and accessibility review.
+- Optional native desktop packaging, only when justified.
+- Long-lived project migrations, crash recovery, archival formats and regression expansion.
+- UX refinement, sample atlases, release/deployment documentation.
+- Further geographic precision, richer topology, regional authored patches and higher-quality rendering where story workflows justify them.
 
-Accept when:
-- Edits remain georeferenced while switching projections.
-- Changing an unlocked generated area never silently rewrites locked places.
-- Unvisited regions don't have to allocate maximum detail.
+Accept when the independently useful application remains responsive across supported devices, existing projects upgrade safely, and distribution/backup behavior is documented and tested. Do not present one hosted Chromium run as universal validation.
 
-## M3 — Underground and narrative extension [P1]
+## Arline Studio interoperability [deferred, unscheduled]
 
-Deliver:
-- Sparse chamber/entrance/tunnel/shaft graph and local depth slices.
-- Simple underground cross-section, local passages, underwater entrances.
-- Map links to story entities and branch/time variants.
-- Standalone narrative place metadata and optional Orbis-local historical/variant scopes.
+[Issue #7](https://github.com/RetrixAlfariz/Arline-Orbis/issues/7) remains outside M0–M5. No Studio APIs, SQLite writes, sync UI or external identity requirements were implemented. Reconsider only after explicit owner authorization and a new review of both products' then-current architecture.
 
-Accept when:
-- A subsurface chamber can be placed at precise depth and located from its entrance.
-- Ocean/seabed vs cave altitude are disambiguated in data and UI.
-- Orbis world, place and optional variant IDs remain stable; the app functions without external services.
+## Prioritization
 
-## M4 — Procedural planetary systems [P2]
-
-Deliver selectively, guided by story value:
-- Plate-inspired continents and ocean basins.
-- Ridge/rift/subduction trench/seamount generators.
-- Basin connectivity, watersheds, rivers, lakes, optional climate and biomes.
-- Deterministic seeded generation with reproducible algorithms and per-stage disabling.
-- Localized 3D cave geometry only for author-selected places.
-
-Accept when:
-- Generated worlds can be recreated from seed, version and options.
-- Ocean landforms are geological outputs where possible, not only painted decorations.
-- Procedural results are editable and never override confirmed author canon.
-- The system remains usable on a modest computer in low-detail mode.
-
-## M5 — Standalone hardening, optimization and distribution [P2]
-
-Deliver:
-- Real-world GPU/CPU/memory benchmarks, progressive tile loading, sensible low-detail mode and graceful degradation.
-- Optional standalone desktop packaging (Tauri if justified).
-- Import/export compatibility, versioned migrations, crash/recovery checks and project backup/restore.
-- Accessibility, keyboard navigation, refined UX, sample atlases, release documentation.
-- Regression coverage for projection seams, bathymetry, locked edits and existing project compatibility.
-
-Accept when:
-- Orbis is a useful standalone worldbuilding application with no other installed services.
-- Large worlds remain interactive through progressive rendering, not universal maximum-resolution allocation.
-- Existing projects upgrade safely, are recoverable and can be exported without data loss.
-- Release documentation, automated tests and reproducible performance baselines exist.
-
-## Unscheduled future possibility — Arline Studio interoperability [deferred, outside M0–M5]
-
-**Do not implement this during the active roadmap.** Arline Studio integration is intentionally a distant possibility only. It can be reconsidered when Orbis has matured as a standalone application, users have stable project files, and both product APIs and data models are sufficiently settled. Research potential reviewed import/export *only after explicit reauthorization*.
-
-[Issue #7](https://github.com/RetrixAlfariz/Arline-Orbis/issues/7) is a parked idea, **not an active development requirement**. It has no target release date, required deliverables, or implied implementation commitment.
-
-## Backlog prioritization rules
-
-1. **Never start advanced geology before M0/M1 is usable.**
-2. Save/restore and authored-canon protection precede regeneration complexity.
-3. Use profiling to justify WASM, Rust, tiling complexity or native packaging.
-4. A feature requested for standalone lore continuity outranks photorealistic presentation.
-5. Break milestone work into small PRs, each with an executable demo and tests.
-
-Track actionable work in [issues](https://github.com/RetrixAlfariz/Arline-Orbis/issues); avoid treating this document as an automatically checked task list.
+Protect authored data before increasing simulation complexity. Keep projections, generation, rendering and persistence separate. Profile before choosing Rust/native dependencies. Prefer story usefulness over photorealistic ornament, and record limitations rather than hiding them behind completed checkboxes.

@@ -2,104 +2,96 @@
 
 > **Give every story a world.**
 
-**Arline Orbis** is a planned, local-first, lightweight planetary atlas for storytellers. It shares the broader Arline identity, but is being designed and built as a **fully standalone application**. Direct [Arline Studio](https://github.com/RetrixAlfariz/Arline-Studio) integration is a **distant, unscheduled possibility**, not part of the current delivery plan. Its purpose is **story continuity and authoring**, not game-world simulation for its own sake.
+A local-first planetary atlas and geographic authoring application for storytellers. Orbis runs independently: no account, cloud database, external map tiles, AI model, or Arline Studio installation is required.
 
-**Status: M0 + M1 implemented; initial M2 authoring and cartographic refinement added.** The local atlas now supports creating independent seeded worlds, geodesic terrain sculpting, elevation cross-sections, bounded 3D relief, and two original map palettes, alongside the existing persistence and landmark workflows. See [M2](docs/M2.md) for the implementation and limitations; [M1](docs/M1.md) and [M0](docs/M0.md) document the earlier foundations.
+**Status: standalone M0–M4 implementation available.** This extends the existing M0/M1 and incremental M2 code with geographic features and projections, underground networks, staged planetary generation, regional detail and production offline support. See the [implementation and acceptance report](docs/M0_M4_COMPLETION.md) for the exact scope, verification and limitations. M5 distribution and broad platform hardening remain separate.
 
 ## Run locally
 
-Requires **Node.js 22.12+** and npm. Dependencies are locked in `package-lock.json`.
+Requires Node.js **22.12+** and npm. Dependencies are locked in `package-lock.json`.
 
 ```sh
 npm ci
 npm run dev
 ```
 
-Open the local URL printed by Vite. No Arline installation, account, remote assets or runtime external service is required. After installing dependencies, development and production preview work without internet access. This release does not install an offline service worker or support double-clicking `dist/index.html`.
+Open the local URL printed by Vite. To use the production build, including offline caching:
+
+```sh
+npm run build
+npm run preview
+```
+
+The first dependency installation and initial asset load need network access or a local server. After the production app reports **Offline ready**, cached assets support offline reload, including the lazy globe and workers. Development mode does not register a service worker. Double-clicking `dist/index.html` with `file://` is not supported.
+
+**Export an important world before updating, clearing browser data, or changing origin.** IndexedDB autosave and recovery are browser/origin-specific. Explicit JSON and compressed `.orbis` backups are portable.
+
+## What is implemented
+
+| Domain | Current capabilities |
+| --- | --- |
+| Planetary atlas | Shared geodetic coordinates, configurable spherical radius, great-circle distance, 2D map and 3D globe, WebGL fallback |
+| Cartography | Natural/Survey styling; equirectangular, Equal Earth, orthographic and regional azimuthal projections; SVG export |
+| Terrain and ocean | Signed land/seafloor elevation, geodesic sculpt strokes, water/depth inspection, authored lake levels, measured elevation profiles |
+| Geographic authoring | Points, lines, polygons, regions, roads, borders and lakes with stable IDs, locks, descriptions, tags and local era scopes |
+| Underground | Entrances, chambers and settlements; tunnel/shaft/portal links; depth slices, sections, routes, reviewed cave suggestions and local 3D envelopes |
+| Planetary systems | Seeded plate-inspired relief, ridges/rifts/trenches/seamounts, optional erosion/sediment, drainage/lakes/rivers, temperature/rainfall/biomes |
+| Performance | Cancellable generation workers, reviewed preview/apply, progressive regional tiles and bounded cache, interaction-driven 3D rendering |
+| Local projects | Autosave, undo/recovery, stale-tab protection, validated legacy imports, version 3 authoring, bounded gzip-compressed `.orbis` interchange |
+
+These are **story-oriented heuristic systems**, not a calibrated geological, atmospheric, fluid or game-world simulator. Regional detail is a demand-paged visualization, not a seamless whole-planet cube-sphere engine. Cave 3D shows chamber envelopes and passages, not a walkable voxel interior.
+
+## First authoring workflow
+
+1. Explore Aurelia or use **Create new world** for an independent seed and radius.
+2. Use **Map features & lore** to draw geography, save descriptions and lock important features.
+3. Use **Sculpt terrain** to raise land or carve seabed. Use Undo to reverse a change.
+4. Open **Underground** to place chambers at meaningful depths and connect passages.
+5. In **Planetary generation · M4**, preview a recipe, inspect conflicts, and explicitly apply it. Cancel never changes the active world.
+6. Export a backup and reopen it. Old v1/v2 worlds retain their original generator recipes; new authoring uses format v3.
+
+## Author-safety contracts
+
+- Coordinates and elevations are physical values, not screen pixels. Projection/style changes never move geographic anchors.
+- Terrain strokes, lake surfaces, water depth and cave altitude use distinct semantics.
+- Locked features resist direct edits and overlapping brushes. Regeneration requires review when underlying terrain changes at authored locations.
+- Generated suggestions do not automatically become authored facts. Accepted terrain can still make a fixed location physically implausible; review remains the author's responsibility.
+- The uncompressed project cap is **2 MB**. Compressed imports enforce the same decompression limit. `.orbis` currently means gzip JSON, **not a ZIP asset package**.
+- Story eras are local visibility scopes, not an Arline branch system or full historical simulation.
+
+## Verification
 
 ```sh
 npm run check
 npm test
 npm run build
-npm run preview
-```
-
-Browser verification (Chromium installation requires internet once):
-
-```sh
 npx playwright install chromium
 npm run test:e2e
 ```
 
-**Edits autosave in this browser. Export a portable backup before clearing browser data or changing origin.** Save failures and stale-tab conflicts are shown explicitly. Terrain is an illustrative seeded fixture, not a scientific planetary simulation.
+For production browser tests, set `ORBIS_E2E_PREVIEW=1` in the environment. On PowerShell use `$env:ORBIS_E2E_PREVIEW='1'` first.
 
-## Why Orbis?
+The implementation verification passed **53 unit tests**, **22 production Chromium browser tests**, Svelte/TypeScript checks with **0 errors and 0 warnings**, and the production build. [Verified run](https://github.com/RetrixAlfariz/Arline-Orbis/actions/runs/38195726366). Repeat CI for later changes; this evidence is not a guarantee about every browser or hardware GPU.
 
-A fantasy world is more than coastlines and country borders. It has real distances, projections, land and seafloor relief, oceans and inland water bodies, underground passages, places and histories. Orbis connects those physical locations to authored story canon.
+Use `node scripts/benchmark-m4.mjs benchmark.json` for reproducible CPU-kernel measurements. Browser evidence separately records worker time, main-thread heartbeat and environment. The large lazy Three.js chunk still produces Vite's size warning; its threshold is not hidden.
 
-**Orbis answers _where_ something happens and lets its author control geographic truth, independently of any other application.**
+## Architecture and documentation
 
-## Product principles
+Svelte 5, TypeScript, Vite, Three.js and D3-geo remain the runtime stack. New generation and region workers use typed arrays and transferable buffers. Native packaging/Rust acceleration remain optional future work.
 
-1. **Story-first:** geography supports writing, lore, navigation, and timelines. Do not build a game engine.
-2. **One spatial world:** surface terrain and ocean bathymetry share a single elevation datum; water levels, water columns, and subsurface features have separate representations.
-3. **Real scale:** planet radius, positions, distances, and elevations are in physical units, independent of how a map is projected.
-4. **2D + 3D:** fast projected atlases and a rotatable 3D globe inspect the same underlying coordinates.
-5. **Detail on demand:** global structure stays lightweight; generate and load detailed regions only when requested.
-6. **Authored canon wins:** generated geography never silently overwrites locked landmarks, lore, or historical facts.
-7. **Local-first and portable:** projects can be saved, backed up, and exchanged without an online account.
-8. **Standalone first:** No Arline Studio APIs, adapters, or database integration in current milestones. Future interoperability must be separately scoped and approved; never mutate external canon silently.
+- [M0–M4 implementation, acceptance and limitations](docs/M0_M4_COMPLETION.md)
+- [Roadmap](docs/ROADMAP.md)
+- [Product specification](docs/PRODUCT_SPEC.md)
+- [Architecture proposal](docs/ARCHITECTURE.md)
+- [Original draft data model](docs/DATA_MODEL.md), distinct from the implemented v3 contract
+- Historical reports: [M0](docs/M0.md), [M1](docs/M1.md), [initial M2](docs/M2.md)
+- [Research and inspiration](docs/REFERENCES.md)
+- [Original Opheline handoff](docs/OPHELINE_HANDOFF.md)
 
-## Scope at a glance
+## Arline Studio remains deferred
 
-| Domain | Initial scope | Later expansion |
-| --- | --- | --- |
-| Planetary scale | Configurable radius, coordinate readout, distance tools | Ellipsoids, multiple exotic geometries |
-| Maps | 2D equirectangular projection, globe, Natural/Survey palettes, profiles | Equal Earth, additional regional projections |
-| Terrain | Global elevation plus persistent authored geodesic brushes, 3D relief | Tectonics, erosion, sophisticated LOD |
-| Oceans | Full seafloor elevation, shelves, ridges, trenches, bathymetric styling | Seabed generation, hydrology, water-column ecology |
-| Underground | Documented depth model and stable place links | Cave networks, cross-sections, localized 3D caverns |
-| Worldbuilding | Locations, labels, notes, editable/locked features | History and world-branch visualization |
-| External interoperability | Portable Orbis projects and stable location IDs | Possible Arline Studio integration only after Orbis matures; unscheduled |
+Orbis shares the Arline identity but does not access Studio APIs, databases or canon. [Issue #7](https://github.com/RetrixAlfariz/Arline-Orbis/issues/7) remains a distant, unscheduled possibility outside this work. Standalone IDs and portable projects serve Orbis itself.
 
-## Stack
+## License
 
-- **TypeScript + Svelte 5 + Vite**, implemented for the responsive editor.
-- **Three.js** for the optional, lazily loaded 3D globe; **D3-geo** for the atlas graticule/projection.
-- **Vitest + Playwright** for geographic/unit tests and real browser interactions.
-- **Web Workers** planned for heavy or cancellable generation; M0 generates one coarse sample on startup.
-- **IndexedDB + versioned project export/import**, autosave, bounded recovery history and stale-tab save protection.
-- **Rust/WASM and Tauri 2** only when profiling or native desktop packaging justifies them.
-- **No Arline Studio dependency** during current development. Keep project serialization portable and identifiers stable, without building an integration adapter.
-
-See [Architecture](docs/ARCHITECTURE.md) for boundaries and engineering decisions.
-
-## Documentation
-
-- [M2 implemented authoring and cartographic changes](docs/M2.md)
-- [Product specification and scope](docs/PRODUCT_SPEC.md)
-- [System architecture and rendering strategy](docs/ARCHITECTURE.md)
-- [Proposed geographic and story data contract](docs/DATA_MODEL.md)
-- [Phased roadmap and acceptance criteria](docs/ROADMAP.md)
-- [Opheline implementation handoff](docs/OPHELINE_HANDOFF.md)
-- [Research references and licensing caution](docs/REFERENCES.md)
-
-## MVP target (M0 + M1)
-
-Build a **working, offline-capable atlas prototype**: open a sample planet, switch between a 2D projected map and a 3D globe, read coordinates and distances, reveal the seafloor, add and lock a location, and export/reopen the same world **without losing authored edits**.
-
-M0 supplies the sample planet and shared 2D/3D inspection. M1 adds persistence, recovery, distance tools, water visibility, locks and portable export/reopen. Review the MVP before expanding into M2 regional authoring; see the [roadmap](docs/ROADMAP.md).
-
-## Relationship to Arline Studio (long-term only)
-
-Orbis is being developed **entirely independently**. Arline Studio v1.1 is feature-frozen, and the two applications have different implementation needs. In the current Orbis roadmap there is **no integration milestone, shared database, API adapter, synchronization layer, or required Arline installation**.
-
-Keep Orbis's saved worlds, geographic coordinates and IDs portable. In the distant future, after the standalone atlas is mature, a separately approved project could explore reviewed import/export or a compatible adapter. The dormant [future interoperability issue](https://github.com/RetrixAlfariz/Arline-Orbis/issues/7) is **not part of Opheline's active work**.
-
-## License and inspiration
-
-This repository's **own software license has not yet been chosen**. Before copying or vendoring external implementation code, review the upstream license and seek a deliberate licensing decision for Orbis. External projects in [references](docs/REFERENCES.md) are for research/inspiration; links do not grant blanket permission to reuse code.
-
----
-
-**Project stage:** M0 + M1 baseline, early M2 geographic editing and cartography implemented • **Mission:** Give every story a world.
+The repository's own software license has **not yet been selected**. Do not infer it from Arline Studio or from reference projects. The new implementation uses original code and the existing locked dependencies; no third-party cartographic imagery or external font assets were added. Review upstream licenses and notices before any future reuse or redistribution.
