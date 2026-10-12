@@ -586,3 +586,46 @@ progress { width:100%; accent-color:#ac4436; }
 .offline-indicator { margin-left:auto; font:10px ui-monospace,monospace; color:#74766b; }
 .local-indicator { margin-left:0; }
 @media(max-width:900px){.offline-indicator{display:none;}}
+
+/* Fieldwork: a guided itinerary, geographic breadcrumbs, and distraction-free observation. */
+.fieldwork-bar { flex-shrink: 0; margin: 0 0 14px; padding: 14px 16px 0; border: 1px solid #bcb09b; border-left: 3px solid #a94335; background: #f7f2e7; }
+.fieldwork-location { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 14px; }
+.fieldwork-kicker { font: 10px 'Segoe UI', sans-serif; letter-spacing: 1.3px; color: #8d4338; }
+.fieldwork-location strong { font: 21px 'Palatino Linotype', Georgia, serif; color: #303c37; }
+.fieldwork-coordinates { margin-left: auto; color: #65695e; font-size: 11px; font-variant-numeric: tabular-nums; }
+.fieldwork-actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 0; }
+.fieldwork-actions button { min-height: 38px; padding: 7px 10px; border: 1px solid #c2b6a2; background: #fdf9f0; color: #3b4942; font-size: 11px; }
+.fieldwork-actions button:hover:not(:disabled) { border-color: #a94335; background: #f0e3d0; }
+.fieldwork-actions .focus-action { margin-left: auto; border-color: #61766a; color: #344d41; }
+.fieldwork-actions button[aria-pressed="true"] { background: #344d41; color: #fff8e8; }
+.stop-navigation { display: flex; gap: 0; }
+.stop-navigation button + button { border-left: 0; }
+.visit-trail { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; padding: 9px 0; border-top: 1px solid #dacdb7; }
+.visit-trail > span { font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: #7b725f; }
+.visit-trail button { padding: 5px 0; border: 0; background: transparent; font-size: 11px; color: #784538; text-decoration: underline; text-underline-offset: 3px; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.visit-trail button:hover { color: #303c37; background: transparent; }
+.fieldwork-invitation { border-top: 1px solid #dacdb7; margin: 0; padding: 9px 0; font-size: 11px; line-height: 1.6; color: #6b6b5f; }
+main.focus-map { grid-template-columns: minmax(0, 1fr); }
+main.focus-map > .places-panel, main.focus-map > .inspector { display: none; }
+main.focus-map > .workspace { grid-column: 1 / -1; grid-row: 1; }
+@media (max-width: 1100px) {
+  main { align-items: start; }
+  .workspace { grid-column: 1; grid-row: 1; width: 100%; }
+  .inspector { grid-column: 2; grid-row: 1; max-height: calc(100dvh - 70px); overflow-y: auto; position: sticky; top: 0; }
+  .places-panel { grid-column: 1 / -1; grid-row: 2; }
+  .chart { flex: 0 0 auto; min-height: 0; grid-template-rows: auto auto auto; }
+  .viewport { aspect-ratio: 1050 / 550; height: auto; min-height: 190px; }
+  .viewport.globe-mode { aspect-ratio: 1; min-height: 260px; }
+  .fieldwork-coordinates { width: 100%; margin-left: 0; }
+  .fieldwork-actions .focus-action { margin-left: 0; }
+}
+@media (max-width: 760px) {
+  .workspace { grid-column: 1; grid-row: 1; }
+  .inspector { grid-column: 1; grid-row: 2; max-height: none; position: static; overflow: visible; }
+  .places-panel { grid-column: 1; grid-row: 3; }
+  .fieldwork-bar { padding: 12px 11px 0; }
+  .fieldwork-location { gap: 5px 10px; }
+  .fieldwork-location strong { font-size: 19px; }
+  .fieldwork-actions button { min-height: 44px; font-size: 12px; }
+  .visit-trail button { min-height: 36px; font-size: 12px; }
+}

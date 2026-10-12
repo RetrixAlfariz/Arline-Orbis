@@ -69,7 +69,7 @@ test('portable import/export retains ownership; invalid input leaves the world i
   await page.getByRole('button', { name: 'Export', exact: true }).click();
   const second = JSON.parse(await readFile((await (await secondDownload).path())!, 'utf8'));
   expect(second.landmarks).toEqual(exported.landmarks);
-  await page.getByText(/Recovery history/).click();
+  await page.locator('.recovery-panel > summary').click();
   await page.getByLabel('Choose a backup', { exact: true }).selectOption('2');
   await page.getByRole('button', { name: 'Restore backup', exact: true }).click();
   await expect(page.getByText('Radius 6,371 km', { exact: true })).toBeVisible();

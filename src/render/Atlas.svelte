@@ -7,7 +7,7 @@
   import type { Coordinate, Landmark } from '../core/world';
   import { coordinate, fromUV, toUV } from '../geo/coordinates';
 
-  let { texture, selection, landmarks, showGrid, showLabels, worldName, sampleRegions, sculptMode, brushRadiusKm, planetRadius_m, projectionKind = 'equirectangular', projectionCenter = {lat_deg:0,lon_deg:0}, features = [], drawingVertices = [], rivers = [], measurementStart = null, onselect, onhover }: {
+  let { texture, selection, landmarks, showGrid, showLabels, worldName, sampleRegions, sculptMode, brushRadiusKm, planetRadius_m, projectionKind = 'equirectangular', projectionCenter = {lat_deg:0,lon_deg:0}, features = [], drawingVertices = [], rivers = [], measurementStart = null, regionBoundary = null, disableExport = false, onselect, onhover }: {
     texture: HTMLCanvasElement;
     selection: Coordinate | null;
     landmarks: Landmark[];
@@ -24,6 +24,8 @@
     drawingVertices?: Coordinate[];
     rivers?: Coordinate[][];
     measurementStart?: Coordinate | null;
+    disableExport?: boolean;
+    regionBoundary?: {center:Coordinate;radius_km:number}|null;
     onselect: (point: Coordinate) => void;
     onhover: (point: Coordinate | null) => void;
   } = $props();
@@ -118,7 +120,7 @@
   }
 </script>
 
-<div class="atlas-navigation" aria-label="Atlas navigation"><button aria-label="Export atlas SVG" onclick={exportAtlas}>SVG</button><button aria-label="Zoom in atlas" disabled={zoom >= 8} onclick={() => magnify(1.5)}>+</button><button aria-label="Zoom out atlas" disabled={zoom <= 1} onclick={() => magnify(1 / 1.5)}>−</button><button aria-label="Reset atlas view" onclick={reset}>{zoom.toFixed(1)}×</button></div>
+<div class="atlas-navigation" aria-label="Atlas navigation"><button disabled={disableExport} aria-label="Export atlas SVG" onclick={exportAtlas}>SVG</button><button aria-label="Zoom in atlas" disabled={zoom >= 8} onclick={() => magnify(1.5)}>+</button><button aria-label="Zoom out atlas" disabled={zoom <= 1} onclick={() => magnify(1 / 1.5)}>−</button><button aria-label="Reset atlas view" onclick={reset}>{zoom.toFixed(1)}×</button></div>
 
 <!-- Custom geographic widget: focus, Enter and arrow-key navigation are implemented above. -->
 <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
@@ -168,6 +170,7 @@
       <text x={uv.u > 0.8 ? -10 : 10} y="-9" text-anchor={uv.u > 0.8 ? 'end' : 'start'} class="map-label">{landmark.name}</text>
     </g>{/if}
   {/each}
+  {#if regionBoundary}<path data-testid="replacement-boundary" d={path(geoCircle().center([regionBoundary.center.lon_deg,regionBoundary.center.lat_deg]).radius(Math.min(179,regionBoundary.radius_km*1000/planetRadius_m*180/Math.PI))())??''} fill="#d9ad51" fill-opacity=".12" stroke="#f0c46e" stroke-width="2" stroke-dasharray="6 3" pointer-events="none"/>{/if}
   {#if selection}
     {@const position = locate(selection)}
     {#if position}{@const uv = {u:position[0]/width,v:position[1]/height}}

@@ -88,6 +88,7 @@ test('atlas pointer, keyboard, seam coordinates and seabed fixtures work without
   await expect(page.getByTestId('longitude')).toHaveText('-179.0000°');
   await page.keyboard.press('ArrowUp');
   await expect(page.getByTestId('latitude')).toHaveText('90.0000°');
+  await page.getByRole('button', { name: 'Minimize Places & files', exact: true }).click();
   await atlas.click({ position: { x: 100, y: 200 } });
   await expect(page.getByTestId('latitude')).not.toHaveText('90.0000°');
   expect(errors).toEqual([]);
@@ -98,6 +99,8 @@ test('mobile layout fits and app requests no external service', async ({ page })
   const external: string[] = [];
   page.on('request', (request) => { if (!request.url().startsWith('http://127.0.0.1:4173')) external.push(request.url()); });
   await page.goto('/');
+  await page.getByText('Layout', { exact: true }).click();
+  await page.getByRole('button', { name: 'Places & files', exact: true }).click();
   await page.getByRole('button', { name: /Crown mountain/ }).click();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: 'test-results/m0-mobile.png', fullPage: true });

@@ -13,7 +13,7 @@
   let options=$state<GenerationOptions>({...DEFAULT_OPTIONS}),seed=$state('orbis-geology-001');
   let busy=$state(false),stage=$state(''),pct=$state(0),error=$state(''),ack=$state(false);
   let preview=$state<WorldData|null>(null);let proposed:Project|undefined,task:GenerationTask|undefined,fingerprint='';
-  const snapshot=(p:Project)=>JSON.stringify({planet:p.planet,strokes:p.terrain_strokes,features:p.features,caves:p.caves,landmarks:p.landmarks,eras:p.eras});
+  const snapshot=(p:Project)=>JSON.stringify({planet:p.planet,strokes:p.terrain_strokes,features:p.features,caves:p.caves,landmarks:p.landmarks,eras:p.eras,regions:p.regional_replacements,options:p.generation_options});
   const conflicts=$derived(preview?regenerationConflicts(project,raster,preview.raster):[]);
   let lastWorld='';
   $effect(()=>{if(project.planet.id!==lastWorld){lastWorld=project.planet.id;options={...DEFAULT_OPTIONS,...project.generation_options};seed=project.planet.seed;}});
@@ -22,7 +22,7 @@
     try{const config=validateOptions(options);if(!seed.trim()||seed.length>100)throw new Error('Enter a nonempty seed, at most 100 characters.');
       proposed={...authoringProject(project),planet:{...project.planet,seed:seed.trim(),algorithm_version:'m4-plates-v1'},generation_options:config};
       fingerprint=snapshot(project);busy=true;pct=0;stage='Starting worker';
-      const next=startGeneration({planet:proposed.planet,strokes:proposed.terrain_strokes!,options:config,width:config.resolution,height:config.resolution/2+1},(s,p)=>{stage=s;pct=p;});task=next;
+      const next=startGeneration({planet:proposed.planet,strokes:proposed.terrain_strokes!,regions:proposed.regional_replacements??[],options:config,width:config.resolution,height:config.resolution/2+1},(s,p)=>{stage=s;pct=p;});task=next;
       const result=await next.result;if(task===next){preview=result;busy=false;}
     }catch(e){busy=false;error=(e as Error).message;}
   }

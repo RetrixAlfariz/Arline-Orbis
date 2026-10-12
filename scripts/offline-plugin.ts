@@ -26,7 +26,7 @@ self.addEventListener('fetch',e=>{
     return (OWNED.has(key)?await c.match(key,{ignoreVary:true}):undefined)||fetch(e.request);
   })());
 });`});
-    this.emitFile({type:'asset',fileName:'manifest.webmanifest',source:JSON.stringify({name:'Arline Orbis',short_name:'Orbis',start_url:'.',scope:'.',display:'standalone',background_color:'#e9e5db',theme_color:'#f5f0e6',icons:[{src:'orbis-icon.svg',sizes:'any',type:'image/svg+xml',purpose:'any'}]})});
-    this.emitFile({type:'asset',fileName:'orbis-icon.svg',source:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><rect width="128" height="128" rx="20" fill="#f5f0e6"/><g fill="none" stroke="#354641" stroke-width="4"><circle cx="64" cy="64" r="44"/><ellipse cx="64" cy="64" rx="19" ry="44"/><path d="M20 64h88M30 38h68M30 90h68"/></g></svg>'});
+    this.emitFile({type:'asset',fileName:'manifest.webmanifest',source:JSON.stringify({name:'Arline Orbis',short_name:'Orbis',start_url:'.',scope:'.',display:'standalone',background_color:'#111416',theme_color:'#1c2023',icons:[{src:'orbis-icon.svg',sizes:'any',type:'image/svg+xml',purpose:'any'}]})});
+    this.emitFile({type:'asset',fileName:'orbis-icon.svg',source:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><rect width="128" height="128" rx="20" fill="#1c2023"/><g fill="none" stroke="#d9ad51" stroke-width="4"><circle cx="64" cy="64" r="44"/><ellipse cx="64" cy="64" rx="19" ry="44"/><path d="M20 64h88M30 38h68M30 90h68"/></g></svg>'});
   }};
 }
